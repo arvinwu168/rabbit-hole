@@ -476,6 +476,12 @@ button:disabled {
   border-color: var(--line);
 }
 
+.inference-badge.is-chatgpt-relay {
+  color: #176b55;
+  background: #e9f7f1;
+  border-color: #cdeadd;
+}
+
 .model-controls-toggle.is-active,
 .dev-mode-toggle.is-active {
   color: var(--forest);
@@ -647,6 +653,12 @@ button:disabled {
   background: #20241f;
 }
 
+.response-provider-icon.is-chatgpt {
+  color: white;
+  background: #202123;
+  border: 1px solid #202123;
+}
+
 .response-provider-icon.is-generic {
   background: var(--forest);
 }
@@ -659,6 +671,23 @@ button:disabled {
 .model-name {
   color: var(--ink-faint);
   font-size: 10.5px;
+}
+
+.response-source-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  padding: 3px 5px;
+  color: var(--ink-faint);
+  border-radius: 5px;
+  font-size: 10px;
+  text-decoration: none;
+}
+
+.response-source-link:hover {
+  color: var(--forest);
+  background: var(--forest-faint);
 }
 
 .message-status {
@@ -1385,6 +1414,184 @@ button:disabled {
   white-space: nowrap;
 }
 
+.relay-panel {
+  display: grid;
+  gap: 8px;
+  padding: 9px 10px;
+  color: var(--ink-soft);
+  background: #f7f8f5;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.relay-panel.is-ready {
+  background: #f0f8f4;
+  border-color: #cfe7da;
+}
+
+.relay-panel.is-unauthorized,
+.relay-panel.is-offline {
+  background: #fcf7f5;
+  border-color: #ead8d3;
+}
+
+.relay-panel.is-rate-limited {
+  background: #fff9eb;
+  border-color: #ead9a8;
+}
+
+.relay-status-row {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.relay-status-icon {
+  width: 27px;
+  height: 27px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  color: var(--ink-faint);
+  background: white;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.relay-panel.is-ready .relay-status-icon {
+  color: var(--forest);
+  border-color: #cfe7da;
+}
+
+.relay-panel.is-unauthorized .relay-status-icon,
+.relay-panel.is-offline .relay-status-icon {
+  color: var(--danger);
+  border-color: #ead8d3;
+}
+
+.relay-panel.is-rate-limited .relay-status-icon {
+  color: #8b6412;
+  border-color: #ead9a8;
+}
+
+.relay-status-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.relay-status-copy strong {
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 650;
+}
+
+.relay-status-copy > span {
+  color: var(--ink-faint);
+  font-size: 9.5px;
+  line-height: 1.35;
+}
+
+.relay-status-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.relay-status-actions button {
+  min-height: 26px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 7px;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 9.5px;
+}
+
+.relay-status-actions button:hover {
+  color: var(--forest);
+  background: white;
+}
+
+.relay-connect-row {
+  min-width: 0;
+  display: grid;
+  grid-template-columns: minmax(190px, 1fr) auto auto;
+  align-items: end;
+  gap: 7px;
+}
+
+.relay-token-field {
+  min-width: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.relay-token-field > span {
+  color: var(--ink-faint);
+  font-size: 9px;
+  font-weight: 650;
+  letter-spacing: 0.045em;
+  text-transform: uppercase;
+}
+
+.relay-token-field input {
+  min-width: 0;
+  width: 100%;
+  height: 30px;
+  padding: 0 8px;
+  color: var(--ink);
+  background: white;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  outline: 0;
+  font: inherit;
+  font-family: var(--font-geist-mono), ui-monospace, monospace;
+  font-size: 10px;
+}
+
+.relay-token-field input:focus {
+  border-color: color-mix(in srgb, var(--forest) 50%, var(--line));
+}
+
+.relay-connect-button {
+  height: 30px;
+  padding: 0 10px;
+  color: white;
+  background: var(--forest);
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.relay-connect-button:disabled {
+  opacity: 0.4;
+}
+
+.relay-command {
+  height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 0 7px;
+  color: var(--ink-faint);
+  white-space: nowrap;
+}
+
+.relay-command code {
+  color: var(--ink-soft);
+  font-size: 9.5px;
+}
+
 .composer-input-row {
   display: flex;
   align-items: flex-end;
@@ -1761,6 +1968,23 @@ button:disabled {
   .command-option {
     grid-template-columns: 1fr;
     gap: 3px;
+  }
+
+  .relay-connect-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .relay-command {
+    display: none;
+  }
+
+  .relay-status-row {
+    align-items: flex-start;
+  }
+
+  .relay-status-actions {
+    flex-direction: column;
+    align-items: flex-end;
   }
 
   .auth-dialog {

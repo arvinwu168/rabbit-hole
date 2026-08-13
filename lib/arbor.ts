@@ -14,6 +14,7 @@ export type TurnNode = {
   createdAt: number;
   model: string;
   anchor?: QuoteAnchor;
+  providerConversationUrl?: string;
 };
 
 export type ChatTree = {

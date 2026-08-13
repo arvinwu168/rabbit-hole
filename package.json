@@ -6,12 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "relay": "node scripts/chatgpt-relay.mjs",
+    "relay:login": "node scripts/chatgpt-relay.mjs --login",
+    "test:relay": "node --test scripts/chatgpt-relay.test.mjs"
   },
   "dependencies": {
     "lucide-react": "^1.31.0",
     "mermaid": "^11.16.1",
     "next": "^16.3.0",
+    "playwright-core": "^1.62.1",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-markdown": "^10.1.0",

@@ -5,7 +5,9 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Clock3,
   Copy,
+  ExternalLink,
   FlaskConical,
   GitBranch,
   Leaf,
@@ -14,18 +16,23 @@ import {
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
+  PlugZap,
   Plus,
   Quote,
+  RefreshCw,
   RotateCcw,
+  ShieldCheck,
   SlidersHorizontal,
   Sparkles,
   SquarePen,
+  Terminal,
   UserRound,
   X,
   Zap,
 } from "lucide-react";
 import {
   FormEvent,
+  useCallback,
   useEffect,
   useId,
   useLayoutEffect,
@@ -63,14 +70,29 @@ const LEGACY_DEMO_CHAT_IDS = new Set([
 ]);
 const MODEL_CONTROLS_STORAGE_KEY = "arbor-model-controls-visible";
 const DEV_MODE_STORAGE_KEY = "arbor-dev-mode";
+const RELAY_TOKEN_STORAGE_KEY = "arbor-chatgpt-relay-token";
+const CHATGPT_RELAY_URL = "http://127.0.0.1:43119";
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 
-type InferenceProvider = "mock" | "groq";
+type InferenceProvider = "mock" | "groq" | "chatgpt-relay";
+type RelayStatus =
+  | "disconnected"
+  | "checking"
+  | "ready"
+  | "rate-limited"
+  | "login-required"
+  | "offline"
+  | "unauthorized";
 
 const INFERENCE_OPTIONS: Record<
   InferenceProvider,
   { label: string; model: string; modelLabel: string }
 > = {
+  "chatgpt-relay": {
+    label: "ChatGPT Relay",
+    model: "Instant via signed-in browser session",
+    modelLabel: "Instant",
+  },
   groq: {
     label: "Groq API",
     model: "openai/gpt-oss-120b",
@@ -335,6 +357,20 @@ function normalizeModelMarkdown(content: string): string {
   return normalized + content.slice(cursor).replace(/<br\s*\/?\s*>/gi, "  \n");
 }
 
+function OpenAIIcon({ size = 14 }: { size?: number }) {
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="currentColor"
+      aria-hidden="true"
+    >
+      <path d="M22.2819 9.8211a5.9847 5.9847 0 0 0-.5157-4.9108 6.0462 6.0462 0 0 0-6.5098-2.9A6.0651 6.0651 0 0 0 4.9807 4.1818a5.9847 5.9847 0 0 0-3.9977 2.9 6.0462 6.0462 0 0 0 .7427 7.0966 5.98 5.98 0 0 0 .511 4.9107 6.051 6.051 0 0 0 6.5146 2.9001A5.9847 5.9847 0 0 0 13.2599 24a6.0557 6.0557 0 0 0 5.7718-4.2058 5.9894 5.9894 0 0 0 3.9977-2.9001 6.0557 6.0557 0 0 0-.7475-7.0729zm-9.022 12.6081a4.4755 4.4755 0 0 1-2.8764-1.0408l.1419-.0804 4.7783-2.7582a.7948.7948 0 0 0 .3927-.6813v-6.7369l2.02 1.1686a.071.071 0 0 1 .038.052v5.5826a4.504 4.504 0 0 1-4.4945 4.4944zm-9.6607-4.1254a4.4708 4.4708 0 0 1-.5346-3.0137l.142.0852 4.783 2.7582a.7712.7712 0 0 0 .7806 0l5.8428-3.3685v2.3324a.0804.0804 0 0 1-.0332.0615L9.74 19.9502a4.4992 4.4992 0 0 1-6.1408-1.6464zM2.3408 7.8956a4.485 4.485 0 0 1 2.3655-1.9728V11.6a.7664.7664 0 0 0 .3879.6765l5.8144 3.3543-2.0201 1.1685a.0757.0757 0 0 1-.071 0l-4.8303-2.7865A4.504 4.504 0 0 1 2.3408 7.872zm16.5963 3.8558L13.1038 8.364 15.1192 7.2a.0757.0757 0 0 1 .071 0l4.8303 2.7913a4.4944 4.4944 0 0 1-.6765 8.1042v-5.6772a.79.79 0 0 0-.407-.667zm2.0107-3.0231l-.142-.0852-4.7735-2.7818a.7759.7759 0 0 0-.7854 0L9.409 9.2297V6.8974a.0662.0662 0 0 1 .0284-.0615l4.8303-2.7866a4.4992 4.4992 0 0 1 6.6802 4.66zM8.3065 12.863l-2.02-1.1638a.0804.0804 0 0 1-.038-.0567V6.0742a4.4992 4.4992 0 0 1 7.3757-3.4537l-.142.0805L8.704 5.459a.7948.7948 0 0 0-.3927.6813zm1.0976-2.3654l2.602-1.4998 2.6069 1.4998v2.9994l-2.5974 1.4997-2.6067-1.4997Z" />
+    </svg>
+  );
+}
+
 function ProviderIdentity({ model }: { model: string }) {
   const segments = model.split(" · ").map((segment) => segment.trim()).filter(Boolean);
   let provider = segments.shift() ?? "AI";
@@ -350,11 +386,12 @@ function ProviderIdentity({ model }: { model: string }) {
   const isMock = providerKey === "mock";
   const isGroq = providerKey === "groq";
   const isGrok = providerKey === "grok";
+  const isChatGpt = providerKey === "chatgpt" || providerKey === "chatgpt relay";
 
   return (
     <>
       <span
-        className={`response-provider-icon ${isArbor ? "is-arbor" : isMock ? "is-mock" : isGroq ? "is-groq" : isGrok ? "is-grok" : "is-generic"}`}
+        className={`response-provider-icon ${isArbor ? "is-arbor" : isMock ? "is-mock" : isGroq ? "is-groq" : isGrok ? "is-grok" : isChatGpt ? "is-chatgpt" : "is-generic"}`}
         aria-hidden="true"
       >
         {isArbor ? (
@@ -363,6 +400,8 @@ function ProviderIdentity({ model }: { model: string }) {
           <FlaskConical size={13} />
         ) : isGroq ? (
           <Zap size={13} />
+        ) : isChatGpt ? (
+          <OpenAIIcon size={14} />
         ) : (
           <Sparkles size={13} />
         )}
@@ -759,6 +798,12 @@ export function ArborApp() {
   const [maxTokens, setMaxTokens] = useState<TokenLimit>("automatic");
   const [modelControlsVisible, setModelControlsVisible] = useState(true);
   const [devMode, setDevMode] = useState(false);
+  const [relayToken, setRelayToken] = useState("");
+  const [relayPaired, setRelayPaired] = useState(false);
+  const [relayStatus, setRelayStatus] = useState<RelayStatus>("disconnected");
+  const [relayMessage, setRelayMessage] = useState(
+    "First time: run npm run relay:login, sign in, close Chrome, then run npm run relay.",
+  );
   const [pendingFixtureId, setPendingFixtureId] = useState<MockFixtureId | null>(null);
   const [pendingHelp, setPendingHelp] = useState(false);
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
@@ -794,6 +839,82 @@ export function ArborApp() {
   );
   const commandPaletteVisible = isCommandInput && !commandPaletteDismissed;
 
+  const checkRelayConnection = useCallback(async (candidateToken?: string) => {
+    const token = (candidateToken ?? relayToken).trim();
+    if (!token) {
+      setRelayStatus("disconnected");
+      setRelayMessage("First time: run npm run relay:login, sign in, close Chrome, then run npm run relay.");
+      return false;
+    }
+
+    setRelayStatus("checking");
+    setRelayMessage("Checking the local browser session…");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 3_500);
+
+    try {
+      const response = await fetch(`${CHATGPT_RELAY_URL}/health`, {
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+
+      if (response.status === 401) {
+        if (window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) === token) {
+          window.sessionStorage.removeItem(RELAY_TOKEN_STORAGE_KEY);
+        }
+        setRelayPaired(false);
+        setRelayStatus("unauthorized");
+        setRelayMessage("That pairing token was rejected. Copy the current token from the relay terminal.");
+        return false;
+      }
+      if (!response.ok) throw new Error(`Relay returned ${response.status}`);
+
+      const health = (await response.json()) as {
+        ready?: boolean;
+        loginRequired?: boolean;
+        rateLimited?: boolean;
+        retryAfterMs?: number;
+        cooldownReason?: "chatgpt" | "traffic-guard";
+        promptBudgetRemaining?: number;
+      };
+      setRelayToken(token);
+      setRelayPaired(true);
+      window.sessionStorage.setItem(RELAY_TOKEN_STORAGE_KEY, token);
+
+      if (health.rateLimited) {
+        const minutes = Math.max(1, Math.ceil((health.retryAfterMs ?? 0) / 60_000));
+        setRelayStatus("rate-limited");
+        setRelayMessage(
+          health.cooldownReason === "traffic-guard"
+            ? `Arbor's safety guard is pacing requests. Try again in about ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`
+            : `ChatGPT temporarily limited this account. Arbor paused relay prompts for about ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
+        );
+        return false;
+      }
+
+      if (health.ready) {
+        setRelayStatus("ready");
+        setRelayMessage("Connected. Prompts stay on this computer and use the signed-in ChatGPT session.");
+        return true;
+      }
+
+      setRelayStatus("login-required");
+      setRelayMessage(
+        health.loginRequired
+          ? "Stop the relay. Run npm run relay:login, finish signing in, close Chrome, then restart the relay."
+          : "The relay browser is starting. Check again in a moment.",
+      );
+      return false;
+    } catch {
+      setRelayStatus("offline");
+      setRelayMessage("No relay answered on 127.0.0.1:43119. Run npm run relay in another terminal.");
+      return false;
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }, [relayToken]);
+
   useEffect(() => {
     const pendingCommand = pendingHelp
       ? "/help"
@@ -812,6 +933,7 @@ export function ArborApp() {
     let restored: WorkspaceState | null = null;
     let restoredModelControlsVisibility: boolean | null = null;
     let restoredDevMode = false;
+    let restoredRelayToken = "";
     try {
       window.localStorage.removeItem(LEGACY_WORKSPACE_STORAGE_KEY);
 
@@ -837,6 +959,7 @@ export function ArborApp() {
       if (IS_DEVELOPMENT) {
         restoredDevMode = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "true";
       }
+      restoredRelayToken = window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) ?? "";
     } catch {}
 
     const frame = window.requestAnimationFrame(() => {
@@ -850,6 +973,10 @@ export function ArborApp() {
         setModelControlsVisible(restoredModelControlsVisibility);
       }
       if (IS_DEVELOPMENT) setDevMode(restoredDevMode);
+      if (restoredRelayToken) {
+        setRelayToken(restoredRelayToken);
+        setRelayPaired(true);
+      }
       setHydrated(true);
     });
 
@@ -876,6 +1003,26 @@ export function ArborApp() {
     if (!hydrated || !IS_DEVELOPMENT) return;
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, String(devMode));
   }, [devMode, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated || inferenceProvider !== "chatgpt-relay" || !relayToken || !relayPaired) return;
+    if (window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) !== relayToken) return;
+
+    const initialCheck = window.setTimeout(() => {
+      if (window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) === relayToken) {
+        void checkRelayConnection(relayToken);
+      }
+    }, 0);
+    const interval = window.setInterval(() => {
+      if (window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) === relayToken) {
+        void checkRelayConnection(relayToken);
+      }
+    }, 12_000);
+    return () => {
+      window.clearTimeout(initialCheck);
+      window.clearInterval(interval);
+    };
+  }, [checkRelayConnection, hydrated, inferenceProvider, relayPaired, relayToken]);
 
   useEffect(() => {
     if (!signInOpen) return;
@@ -978,18 +1125,30 @@ export function ArborApp() {
     fixtureId?: MockFixtureId,
   ) {
     try {
-      const response = await fetch("/api/chat", {
+      const usingRelay = inferenceProvider === "chatgpt-relay";
+      if (usingRelay && relayStatus !== "ready") {
+        throw new Error("Connect the local ChatGPT relay before sending a message.");
+      }
+
+      const response = await fetch(usingRelay ? `${CHATGPT_RELAY_URL}/chat` : "/api/chat", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt,
-          messages,
-          anchor,
-          provider: inferenceProvider,
-          devMode: IS_DEVELOPMENT && devMode,
-          ...(effectiveMaxTokens ? { maxTokens: effectiveMaxTokens } : {}),
-          ...(fixtureId ? { fixtureId } : {}),
-        }),
+        headers: {
+          "Content-Type": "application/json",
+          ...(usingRelay ? { Authorization: `Bearer ${relayToken}` } : {}),
+        },
+        body: JSON.stringify(
+          usingRelay
+            ? { messages }
+            : {
+                prompt,
+                messages,
+                anchor,
+                provider: inferenceProvider,
+                devMode: IS_DEVELOPMENT && devMode,
+                ...(effectiveMaxTokens ? { maxTokens: effectiveMaxTokens } : {}),
+                ...(fixtureId ? { fixtureId } : {}),
+              },
+        ),
       });
 
       if (!response.ok || !response.body) {
@@ -1005,6 +1164,46 @@ export function ArborApp() {
       const decoder = new TextDecoder();
       let content = "";
 
+      if (usingRelay) {
+        let buffer = "";
+        let completed = false;
+
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+          const lines = buffer.split("\n");
+          buffer = done ? "" : (lines.pop() ?? "");
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const event = JSON.parse(line) as {
+              type?: "snapshot" | "done" | "error";
+              text?: string;
+              error?: string;
+              conversationUrl?: string;
+            };
+
+            if (event.type === "error") throw new Error(event.error || "The ChatGPT relay failed.");
+            if ((event.type === "snapshot" || event.type === "done") && typeof event.text === "string") {
+              content = event.text;
+              updateNode(chatId, nodeId, {
+                response: content,
+                ...(event.conversationUrl ? { providerConversationUrl: event.conversationUrl } : {}),
+              });
+            }
+            if (event.type === "done") completed = true;
+          }
+
+          if (done) break;
+        }
+
+        if (!completed || !content) {
+          throw new Error("The ChatGPT relay ended before returning a complete response.");
+        }
+        updateNode(chatId, nodeId, { status: "complete", response: content });
+        return;
+      }
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -1015,6 +1214,13 @@ export function ArborApp() {
       updateNode(chatId, nodeId, { status: "complete", response: content });
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown inference error";
+      if (
+        inferenceProvider === "chatgpt-relay"
+        && /temporarily limited this account|relay safety guard blocked/i.test(detail)
+      ) {
+        setRelayStatus("rate-limited");
+        setRelayMessage(detail);
+      }
       updateNode(chatId, nodeId, {
         status: "error",
         response: `Generation was interrupted: ${detail.slice(0, 320)}`,
@@ -1058,6 +1264,14 @@ export function ArborApp() {
     } else {
       setCopiedNodeId(null);
     }
+  }
+
+  function disconnectRelay() {
+    window.sessionStorage.removeItem(RELAY_TOKEN_STORAGE_KEY);
+    setRelayToken("");
+    setRelayPaired(false);
+    setRelayStatus("disconnected");
+    setRelayMessage("First time: run npm run relay:login, sign in, close Chrome, then run npm run relay.");
   }
 
   function runComposerCommand(option: ComposerCommandOption) {
@@ -1360,7 +1574,12 @@ export function ArborApp() {
           <div className="main-header-actions">
             {modelControlsVisible ? (
               <span className={`inference-badge is-${inferenceProvider}`}>
-                <Sparkles size={13} /> {selectedInference.label} · {selectedInference.modelLabel}
+                {inferenceProvider === "chatgpt-relay" ? (
+                  <OpenAIIcon size={13} />
+                ) : (
+                  <Sparkles size={13} />
+                )}{" "}
+                {selectedInference.label} · {selectedInference.modelLabel}
               </span>
             ) : null}
             <button
@@ -1448,6 +1667,16 @@ export function ArborApp() {
                     <div className="assistant-message">
                       <div className="assistant-head">
                         <ProviderIdentity model={node.model} />
+                        {node.providerConversationUrl ? (
+                          <a
+                            className="response-source-link"
+                            href={node.providerConversationUrl}
+                            target="_blank"
+                            rel="noreferrer"
+                          >
+                            Open in ChatGPT <ExternalLink size={11} />
+                          </a>
+                        ) : null}
                         <StatusMark status={node.status} />
                       </div>
 
@@ -1536,6 +1765,7 @@ export function ArborApp() {
                     }}
                     disabled={isGenerating}
                   >
+                    <option value="chatgpt-relay">ChatGPT Relay</option>
                     <option value="groq">Groq API</option>
                     <option value="mock">Mock API</option>
                   </select>
@@ -1562,6 +1792,83 @@ export function ArborApp() {
                       ))}
                     </select>
                   </label>
+                ) : null}
+              </div>
+            ) : null}
+
+            {inferenceProvider === "chatgpt-relay" ? (
+              <div className={`relay-panel is-${relayStatus}`} aria-live="polite">
+                <div className="relay-status-row">
+                  <span className="relay-status-icon" aria-hidden="true">
+                    {relayStatus === "ready" ? (
+                      <ShieldCheck size={16} />
+                    ) : relayStatus === "rate-limited" ? (
+                      <Clock3 size={16} />
+                    ) : relayStatus === "checking" ? (
+                      <LoaderCircle size={16} className="spin" />
+                    ) : (
+                      <PlugZap size={16} />
+                    )}
+                  </span>
+                  <span className="relay-status-copy">
+                    <strong>
+                      {relayStatus === "ready"
+                        ? "ChatGPT connected locally"
+                        : relayStatus === "rate-limited"
+                          ? "ChatGPT is cooling down"
+                        : relayStatus === "login-required"
+                          ? "ChatGPT sign-in needed"
+                          : relayStatus === "checking"
+                            ? "Checking relay"
+                            : "Connect ChatGPT Relay"}
+                    </strong>
+                    <span>{relayMessage}</span>
+                  </span>
+                  {relayStatus === "ready" || relayStatus === "rate-limited" ? (
+                    <span className="relay-status-actions">
+                      <button
+                        type="button"
+                        onClick={() => void checkRelayConnection()}
+                        aria-label="Refresh relay connection"
+                        title="Refresh connection"
+                      >
+                        <RefreshCw size={13} />
+                      </button>
+                      <button type="button" onClick={disconnectRelay}>Disconnect</button>
+                    </span>
+                  ) : null}
+                </div>
+
+                {relayStatus !== "ready" && relayStatus !== "rate-limited" ? (
+                  <div className="relay-connect-row">
+                    <label className="relay-token-field">
+                      <span>Pairing token</span>
+                      <input
+                        type="password"
+                        value={relayToken}
+                        onChange={(event) => {
+                          setRelayToken(event.target.value);
+                          setRelayPaired(false);
+                          setRelayStatus("disconnected");
+                        }}
+                        placeholder="Paste token from the relay terminal"
+                        autoComplete="off"
+                        spellCheck={false}
+                        disabled={relayStatus === "checking"}
+                      />
+                    </label>
+                    <button
+                      type="button"
+                      className="relay-connect-button"
+                      onClick={() => void checkRelayConnection()}
+                      disabled={!relayToken.trim() || relayStatus === "checking"}
+                    >
+                      Connect
+                    </button>
+                    <span className="relay-command" title="Run these from the Arbor project directory">
+                      <Terminal size={12} /> <code>relay:login → relay</code>
+                    </span>
+                  </div>
                 ) : null}
               </div>
             ) : null}
@@ -1675,7 +1982,11 @@ export function ArborApp() {
               <button
                 type="submit"
                 className="send-button"
-                disabled={!composerValue.trim() || isGenerating}
+                disabled={
+                  !composerValue.trim()
+                  || isGenerating
+                  || (inferenceProvider === "chatgpt-relay" && relayStatus !== "ready")
+                }
                 aria-label={isCommandInput ? "Run command" : "Send message"}
               >
                 {isGenerating ? <LoaderCircle size={17} className="spin" /> : <ArrowUp size={17} />}
