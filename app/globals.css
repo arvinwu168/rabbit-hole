@@ -476,10 +476,16 @@ button:disabled {
   border-color: var(--line);
 }
 
-.inference-badge.is-chatgpt-relay {
+.inference-badge.is-relay {
   color: #176b55;
   background: #e9f7f1;
   border-color: #cdeadd;
+}
+
+.inference-badge.is-gateway {
+  color: #4f3fb0;
+  background: #f0edff;
+  border-color: #dcd5ff;
 }
 
 .model-controls-toggle.is-active,
@@ -643,6 +649,10 @@ button:disabled {
 .response-provider-icon.is-arbor {
   background: var(--forest);
   box-shadow: 0 3px 10px rgba(34, 100, 73, 0.16);
+}
+
+.response-provider-icon.is-gateway {
+  background: #5b4bc4;
 }
 
 .response-provider-icon.is-groq {

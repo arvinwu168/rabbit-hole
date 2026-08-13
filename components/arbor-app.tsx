@@ -61,6 +61,18 @@ import {
   type MockFixtureId,
   type MockFixtureSelection,
 } from "@/lib/mock-fixtures";
+import {
+  AUTOMATIC_OUTPUT_TOKENS,
+  DEFAULT_INFERENCE_OPTION_ID,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  INFERENCE_OPTION_GROUPS,
+  INFERENCE_OPTIONS,
+  OUTPUT_TOKEN_OPTIONS,
+  modelLabelForId,
+  type InferenceOptionId,
+  type OutputTokenLimit,
+  type OutputTokenSetting,
+} from "@/lib/inference-options";
 
 const LEGACY_WORKSPACE_STORAGE_KEY = "arbor-workspace-v1";
 const GUEST_WORKSPACE_STORAGE_KEY = "arbor-guest-workspace-v1";
@@ -75,7 +87,6 @@ const RELAY_TOKEN_STORAGE_KEY = "arbor-chatgpt-relay-token";
 const CHATGPT_RELAY_URL = "http://127.0.0.1:43119";
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 
-type InferenceProvider = "mock" | "groq" | "chatgpt-relay";
 type RelayStatus =
   | "disconnected"
   | "checking"
@@ -84,30 +95,6 @@ type RelayStatus =
   | "login-required"
   | "offline"
   | "unauthorized";
-
-const INFERENCE_OPTIONS: Record<
-  InferenceProvider,
-  { label: string; model: string; modelLabel: string }
-> = {
-  "chatgpt-relay": {
-    label: "ChatGPT Relay",
-    model: "Instant via signed-in browser session",
-    modelLabel: "Instant",
-  },
-  groq: {
-    label: "Groq API",
-    model: "openai/gpt-oss-120b",
-    modelLabel: "GPT-OSS 120B",
-  },
-  mock: {
-    label: "Mock API",
-    model: "simulated",
-    modelLabel: "Simulated",
-  },
-};
-
-const MAX_TOKEN_OPTIONS = [128, 256, 512, 1024] as const;
-type TokenLimit = "automatic" | (typeof MAX_TOKEN_OPTIONS)[number];
 
 type ComposerCommandOption = {
   id: string;
@@ -246,10 +233,17 @@ function developerHelpResponse(): string {
   ].join("\n");
 }
 
-function inferenceLabel(provider: InferenceProvider, maxTokens?: number): string {
-  const option = INFERENCE_OPTIONS[provider];
-  const tokenLabel = provider === "groq" && maxTokens ? ` · max ${maxTokens}` : "";
-  return `${option.label.replace(" API", "")} · ${option.modelLabel}${tokenLabel}`;
+function inferenceLabel(
+  inferenceOptionId: InferenceOptionId,
+  outputTokenSetting?: OutputTokenSetting,
+): string {
+  const option = INFERENCE_OPTIONS[inferenceOptionId];
+  const tokenLabel = !option.supportsOutputCap || outputTokenSetting === undefined
+    ? ""
+    : outputTokenSetting === AUTOMATIC_OUTPUT_TOKENS
+      ? " · automatic"
+      : ` · max ${outputTokenSetting}`;
+  return `${option.providerLabel} · ${option.modelLabel}${tokenLabel}`;
 }
 
 function responseInferenceLabel(headers: Headers, fallback: string): string {
@@ -265,9 +259,12 @@ function responseInferenceLabel(headers: Headers, fallback: string): string {
     if (fixtureSelection) return `${provider} · ${fixtureSelection.label}`;
   }
 
-  const modelLabel =
-    model === "openai/gpt-oss-120b" ? "GPT-OSS 120B" : model === "simulated" ? "Simulated" : model;
-  const tokenLabel = provider === "Groq" && maxTokens ? ` · max ${maxTokens}` : "";
+  const modelLabel = modelLabelForId(model);
+  const tokenLabel = maxTokens === AUTOMATIC_OUTPUT_TOKENS
+    ? " · automatic"
+    : maxTokens
+      ? ` · max ${maxTokens}`
+      : "";
   return `${provider} · ${modelLabel}${tokenLabel}`;
 }
 
@@ -385,14 +382,15 @@ function ProviderIdentity({ model }: { model: string }) {
   const providerKey = provider.toLowerCase();
   const isArbor = providerKey === "arbor";
   const isMock = providerKey === "mock";
-  const isGroq = providerKey === "groq";
+  const isGateway = providerKey === "ai gateway";
+  const isGroq = providerKey === "groq" || providerKey === "groq direct";
   const isGrok = providerKey === "grok";
   const isChatGpt = providerKey === "chatgpt" || providerKey === "chatgpt relay";
 
   return (
     <>
       <span
-        className={`response-provider-icon ${isArbor ? "is-arbor" : isMock ? "is-mock" : isGroq ? "is-groq" : isGrok ? "is-grok" : isChatGpt ? "is-chatgpt" : "is-generic"}`}
+        className={`response-provider-icon ${isArbor ? "is-arbor" : isMock ? "is-mock" : isGateway ? "is-gateway" : isGroq ? "is-groq" : isGrok ? "is-grok" : isChatGpt ? "is-chatgpt" : "is-generic"}`}
         aria-hidden="true"
       >
         {isArbor ? (
@@ -421,13 +419,16 @@ function formatLatency(milliseconds: number): string {
 
 function LatencySummary({ metrics }: { metrics: RelayLatencyMetrics }) {
   const endToEndMs = metrics.endToEndMs ?? metrics.relayTotalMs;
-  const arborOverheadMs = metrics.arborOverheadMs ?? metrics.relayOverheadMs;
+  const arborClientMs = metrics.arborClientMs
+    ?? Math.max(0, endToEndMs - metrics.relayTotalMs);
   const details = [
     `Queue: ${formatLatency(metrics.queueMs)}`,
-    `Browser setup: ${formatLatency(metrics.browserSetupMs)}`,
+    `Relay/browser setup: ${formatLatency(metrics.browserSetupMs)}`,
+    `Fresh chat: ${metrics.prewarmHit ? "prewarmed" : "prepared on demand"}`,
     `ChatGPT first text: ${formatLatency(metrics.chatgptTimeToFirstTextMs)}`,
     `ChatGPT generation/capture: ${formatLatency(metrics.chatgptGenerationMs)}`,
     `Capture stability window: ${formatLatency(metrics.stabilityWindowMs)}`,
+    `Arbor UI/network: ${formatLatency(arborClientMs)}`,
   ].join(" · ");
 
   return (
@@ -435,7 +436,7 @@ function LatencySummary({ metrics }: { metrics: RelayLatencyMetrics }) {
       <Clock3 size={11} />
       <span>E2E {formatLatency(endToEndMs)}</span>
       <span>ChatGPT {formatLatency(metrics.chatgptObservedMs)}</span>
-      <span>Arbor {formatLatency(arborOverheadMs)}</span>
+      <span>Relay setup {formatLatency(metrics.relayOverheadMs)}</span>
     </span>
   );
 }
@@ -822,8 +823,10 @@ export function ArborApp() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
   const [openBranchMenuId, setOpenBranchMenuId] = useState<string | null>(null);
-  const [inferenceProvider, setInferenceProvider] = useState<InferenceProvider>("chatgpt-relay");
-  const [maxTokens, setMaxTokens] = useState<TokenLimit>("automatic");
+  const [inferenceOptionId, setInferenceOptionId] = useState<InferenceOptionId>(
+    DEFAULT_INFERENCE_OPTION_ID,
+  );
+  const [maxTokens, setMaxTokens] = useState<OutputTokenSetting>(DEFAULT_MAX_OUTPUT_TOKENS);
   const [modelControlsVisible, setModelControlsVisible] = useState(true);
   const [devMode, setDevMode] = useState(false);
   const [relayToken, setRelayToken] = useState("");
@@ -854,16 +857,16 @@ export function ArborApp() {
     () => (activeChat && activeNode ? getNodePath(activeChat, activeNode.id) : []),
     [activeChat, activeNode],
   );
-  const isGenerating = workspace.chats.some((chat) =>
-    Object.values(chat.nodes).some((node) => node.status === "streaming"),
-  );
-  const selectedInference = INFERENCE_OPTIONS[inferenceProvider];
-  const effectiveMaxTokens = devMode && typeof maxTokens === "number" ? maxTokens : undefined;
+  const selectedInference = INFERENCE_OPTIONS[inferenceOptionId];
+  const selectedOutputTokenSetting = selectedInference.supportsOutputCap ? maxTokens : undefined;
+  const effectiveMaxTokens = selectedOutputTokenSetting === AUTOMATIC_OUTPUT_TOKENS
+    ? undefined
+    : selectedOutputTokenSetting;
   const pendingFixture = pendingFixtureId ? getMockFixtureSelection(pendingFixtureId) : undefined;
   const selectedInferenceLabel =
-    inferenceProvider === "mock" && pendingFixture
+    inferenceOptionId === "mock" && pendingFixture
       ? `Mock · ${pendingFixture.label}`
-      : inferenceLabel(inferenceProvider, effectiveMaxTokens);
+      : inferenceLabel(inferenceOptionId, selectedOutputTokenSetting);
   const isCommandInput =
     IS_DEVELOPMENT && devMode && composerValue.trimStart().startsWith("/");
   const commandOptions = useMemo(
@@ -907,15 +910,21 @@ export function ArborApp() {
         ready?: boolean;
         loginRequired?: boolean;
         rateLimited?: boolean;
+        retryAt?: string | null;
       };
       setRelayToken(token);
       setRelayPaired(true);
       window.sessionStorage.setItem(RELAY_TOKEN_STORAGE_KEY, token);
 
       if (health.rateLimited) {
+        const retryTime = health.retryAt
+          ? new Date(health.retryAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+          : null;
         setRelayStatus("rate-limited");
         setRelayMessage(
-          "ChatGPT is showing a temporary usage warning. Arbor will allow prompts again as soon as that warning clears.",
+          retryTime
+            ? `Arbor paused new ChatGPT launches until about ${retryTime}; queued prompts will not be submitted.`
+            : "Arbor paused new ChatGPT launches after a temporary usage warning.",
         );
         return false;
       }
@@ -1032,7 +1041,7 @@ export function ArborApp() {
   }, [devMode, hydrated]);
 
   useEffect(() => {
-    if (!hydrated || inferenceProvider !== "chatgpt-relay" || !relayToken || !relayPaired) return;
+    if (!hydrated || inferenceOptionId !== "chatgpt-relay" || !relayToken || !relayPaired) return;
     if (window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) !== relayToken) return;
 
     const initialCheck = window.setTimeout(() => {
@@ -1049,7 +1058,7 @@ export function ArborApp() {
       window.clearTimeout(initialCheck);
       window.clearInterval(interval);
     };
-  }, [checkRelayConnection, hydrated, inferenceProvider, relayPaired, relayToken]);
+  }, [checkRelayConnection, hydrated, inferenceOptionId, relayPaired, relayToken]);
 
   useEffect(() => {
     if (!signInOpen) return;
@@ -1169,7 +1178,7 @@ export function ArborApp() {
     // eslint-disable-next-line react-hooks/purity
     const requestStartedAt = Date.now();
     try {
-      const usingRelay = inferenceProvider === "chatgpt-relay";
+      const usingRelay = selectedInference.transport === "relay";
       if (usingRelay && relayStatus !== "ready") {
         throw new Error("Connect the local ChatGPT relay before sending a message.");
       }
@@ -1187,7 +1196,7 @@ export function ArborApp() {
                 prompt,
                 messages,
                 anchor,
-                provider: inferenceProvider,
+                inference: inferenceOptionId,
                 devMode: IS_DEVELOPMENT && devMode,
                 ...(effectiveMaxTokens ? { maxTokens: effectiveMaxTokens } : {}),
                 ...(fixtureId ? { fixtureId } : {}),
@@ -1207,6 +1216,7 @@ export function ArborApp() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let content = "";
+      const streamProtocol = response.headers.get("X-Arbor-Stream-Protocol");
 
       if (usingRelay) {
         let buffer = "";
@@ -1250,6 +1260,7 @@ export function ArborApp() {
                         ...event.metrics,
                         endToEndMs,
                         arborOverheadMs: Math.max(0, endToEndMs - event.metrics.chatgptObservedMs),
+                        arborClientMs: Math.max(0, endToEndMs - event.metrics.relayTotalMs),
                       },
                     }
                   : {}),
@@ -1268,6 +1279,42 @@ export function ArborApp() {
         return;
       }
 
+      if (streamProtocol === "arbor-ndjson-v1") {
+        let buffer = "";
+
+        while (true) {
+          const { value, done } = await reader.read();
+          buffer += decoder.decode(value ?? new Uint8Array(), { stream: !done });
+          const lines = buffer.split("\n");
+          buffer = done ? "" : (lines.pop() ?? "");
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            const event = JSON.parse(line) as {
+              type?: "delta" | "error";
+              text?: string;
+              error?: string;
+            };
+
+            if (event.type === "error") {
+              throw new Error(event.error || "The inference provider failed.");
+            }
+            if (event.type === "delta" && typeof event.text === "string") {
+              content += event.text;
+              updateNode(chatId, nodeId, { response: content });
+            }
+          }
+
+          if (done) break;
+        }
+
+        if (!content) {
+          throw new Error("The inference provider completed without returning text.");
+        }
+        updateNode(chatId, nodeId, { status: "complete", response: content });
+        return;
+      }
+
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -1279,7 +1326,7 @@ export function ArborApp() {
     } catch (error) {
       const detail = error instanceof Error ? error.message : "Unknown inference error";
       if (
-        inferenceProvider === "chatgpt-relay"
+        selectedInference.transport === "relay"
         && /temporarily limiting this account/i.test(detail)
       ) {
         setRelayStatus("rate-limited");
@@ -1397,7 +1444,7 @@ export function ArborApp() {
 
     setDevMode(true);
     setModelControlsVisible(true);
-    setInferenceProvider("mock");
+    setInferenceOptionId("mock");
     setPendingHelp(false);
     setPendingFixtureId(option.fixture.id);
     setComposerValue(option.command);
@@ -1635,13 +1682,15 @@ export function ArborApp() {
           </div>
           <div className="main-header-actions">
             {modelControlsVisible ? (
-              <span className={`inference-badge is-${inferenceProvider}`}>
-                {inferenceProvider === "chatgpt-relay" ? (
+              <span className={`inference-badge is-${selectedInference.transport}`}>
+                {selectedInference.transport === "relay" ? (
                   <OpenAIIcon size={13} />
+                ) : selectedInference.transport === "groq" ? (
+                  <Zap size={13} />
                 ) : (
                   <Sparkles size={13} />
                 )}{" "}
-                {selectedInference.label} · {selectedInference.modelLabel}
+                {selectedInference.providerLabel} · {selectedInference.modelLabel}
               </span>
             ) : null}
             <button
@@ -1822,35 +1871,51 @@ export function ArborApp() {
                 <label>
                   <span>Model</span>
                   <select
-                    value={inferenceProvider}
+                    value={inferenceOptionId}
                     onChange={(event) => {
-                      const provider = event.target.value as InferenceProvider;
-                      setInferenceProvider(provider);
-                      if (provider !== "mock") setPendingFixtureId(null);
+                      const optionId = event.target.value as InferenceOptionId;
+                      setInferenceOptionId(optionId);
+                      if (optionId !== "mock") setPendingFixtureId(null);
                     }}
-                    disabled={isGenerating}
+                    disabled={composerBlockedByGeneration}
                   >
-                    <option value="chatgpt-relay">ChatGPT Relay</option>
-                    <option value="groq">Groq API</option>
-                    <option value="mock">Mock API</option>
+                    {INFERENCE_OPTION_GROUPS.map((group) => (
+                      <optgroup key={group.label} label={group.label}>
+                        {group.optionIds.map((optionId) => {
+                          const option = INFERENCE_OPTIONS[optionId];
+                          return (
+                            <option key={optionId} value={optionId}>
+                              {option.providerLabel} · {option.modelLabel}
+                            </option>
+                          );
+                        })}
+                      </optgroup>
+                    ))}
                   </select>
                 </label>
-                <span className="developer-model" title={selectedInference.model}>
+                <span
+                  className="developer-model"
+                  title={`${selectedInference.modelId} — ${selectedInference.description}`}
+                >
                   {selectedInference.modelLabel}
                 </span>
-                {IS_DEVELOPMENT && devMode ? (
-                  <label title="Automatic lets the provider and model decide when to stop">
+                {selectedInference.supportsOutputCap ? (
+                  <label title="Choose a hard output-token cap, or Automatic to let the model stop naturally">
                     <span>Output cap</span>
                     <select
                       value={maxTokens}
                       onChange={(event) => {
                         const value = event.target.value;
-                        setMaxTokens(value === "automatic" ? "automatic" : (Number(value) as TokenLimit));
+                        setMaxTokens(
+                          value === AUTOMATIC_OUTPUT_TOKENS
+                            ? AUTOMATIC_OUTPUT_TOKENS
+                            : Number(value) as OutputTokenLimit,
+                        );
                       }}
-                      disabled={isGenerating || inferenceProvider !== "groq"}
+                      disabled={composerBlockedByGeneration}
                     >
-                      <option value="automatic">Automatic</option>
-                      {MAX_TOKEN_OPTIONS.map((tokenCount) => (
+                      <option value={AUTOMATIC_OUTPUT_TOKENS}>Automatic</option>
+                      {OUTPUT_TOKEN_OPTIONS.map((tokenCount) => (
                         <option key={tokenCount} value={tokenCount}>
                           {tokenCount} tokens
                         </option>
@@ -1861,7 +1926,7 @@ export function ArborApp() {
               </div>
             ) : null}
 
-            {inferenceProvider === "chatgpt-relay" ? (
+            {inferenceOptionId === "chatgpt-relay" ? (
               <div className={`relay-panel is-${relayStatus}`} aria-live="polite">
                 <div className="relay-status-row">
                   <span className="relay-status-icon" aria-hidden="true">
@@ -2050,7 +2115,7 @@ export function ArborApp() {
                 disabled={
                   !composerValue.trim()
                   || composerBlockedByGeneration
-                  || (inferenceProvider === "chatgpt-relay" && relayStatus !== "ready")
+                  || (inferenceOptionId === "chatgpt-relay" && relayStatus !== "ready")
                 }
                 aria-label={isCommandInput ? "Run command" : "Send message"}
               >

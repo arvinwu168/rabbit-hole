@@ -15,6 +15,7 @@ const CHATGPT_URL = "https://chatgpt.com/";
 const MAX_REQUEST_BYTES = 2 * 1024 * 1024;
 const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_MAX_CONCURRENT = 3;
+const CHATGPT_ACCOUNT_COOLDOWN_MS = 60 * 60 * 1_000;
 const RESPONSE_STABILITY_MS = 450;
 let relayLogPath = null;
 let relayLogWarningShown = false;
@@ -40,7 +41,14 @@ export function formatRelayLogEntry(timestamp, event, details = {}) {
   return `${JSON.stringify({ timestamp, event, ...details })}\n`;
 }
 
-export function buildLatencyMetrics({ startedAt, acquiredAt, submittedAt, firstSnapshotAt, completedAt }) {
+export function buildLatencyMetrics({
+  startedAt,
+  acquiredAt,
+  submittedAt,
+  firstSnapshotAt,
+  completedAt,
+  prewarmHit = false,
+}) {
   const firstTextAt = firstSnapshotAt ?? completedAt;
   const chatgptObservedMs = Math.max(0, completedAt - submittedAt);
   const relayTotalMs = Math.max(0, completedAt - startedAt);
@@ -54,6 +62,16 @@ export function buildLatencyMetrics({ startedAt, acquiredAt, submittedAt, firstS
     relayOverheadMs: Math.max(0, relayTotalMs - chatgptObservedMs),
     relayTotalMs,
     stabilityWindowMs: RESPONSE_STABILITY_MS,
+    prewarmHit,
+  };
+}
+
+export function chatGptCooldownState(cooldownUntil, now = Date.now()) {
+  const remainingMs = Math.max(0, cooldownUntil - now);
+  return {
+    rateLimited: remainingMs > 0,
+    cooldownRemainingMs: remainingMs,
+    retryAt: remainingMs > 0 ? new Date(cooldownUntil).toISOString() : null,
   };
 }
 
@@ -120,8 +138,11 @@ Environment variables:
   ARBOR_RELAY_LOG           Diagnostic log path (default: .arbor/chatgpt-relay.log)
 
 The relay sends only explicit user prompts, never retries them automatically,
-and runs at most ${DEFAULT_MAX_CONCURRENT} user-initiated generations at a time. Additional
-prompts wait locally until a slot is available.
+and runs at most ${DEFAULT_MAX_CONCURRENT} user-initiated generations at a time. Launches are
+serialized, so a later prompt begins setup only after the previous prompt was
+submitted; completed launches may continue streaming concurrently. Additional
+prompts wait locally until a slot is available. A ChatGPT protection warning
+pauses all new launches for one hour.
 
 First run npm run relay:login, finish signing in inside ordinary Chrome, and
 close that window. Then run npm run relay. Arbor never receives your ChatGPT
@@ -640,7 +661,12 @@ async function waitUntilVisible(locator, timeout) {
     .catch(() => false);
 }
 
-export async function selectInstantModel(page, onDiagnostic = () => {}) {
+export async function selectInstantModel(page, onDiagnostic = () => {}, knownSelection = null) {
+  if (knownSelection?.preferred) {
+    onDiagnostic("instant-inherited-from-session");
+    return knownSelection;
+  }
+
   const selectedInstant = page.getByRole("button", { name: CHATGPT_INSTANT_LABEL, exact: true }).first();
   if (await waitUntilVisible(selectedInstant, 5_000)) {
     onDiagnostic("instant-already-selected");
@@ -653,6 +679,10 @@ export async function selectInstantModel(page, onDiagnostic = () => {}) {
     .first();
   const namedSwitcher = page.getByRole("button", { name: /switch model|model selector|choose model/i }).first();
   const currentLabel = await visibleModelButton.innerText({ timeout: 500 }).catch(() => "");
+  if (/^\s*Instant\s*$/i.test(currentLabel)) {
+    onDiagnostic("instant-already-selected");
+    return { label: CHATGPT_INSTANT_LABEL, preferred: true };
+  }
   const switcher = (await visibleModelButton.isVisible().catch(() => false))
     ? visibleModelButton
     : namedSwitcher;
@@ -700,7 +730,9 @@ export async function selectInstantModel(page, onDiagnostic = () => {}) {
 }
 
 export async function openFreshChat(page) {
-  await page.goto(CHATGPT_URL, { waitUntil: "domcontentloaded", timeout: 10_000 });
+  if (!isChatGptHome(page.url())) {
+    await page.goto(CHATGPT_URL, { waitUntil: "domcontentloaded", timeout: 10_000 });
+  }
 
   if (!isChatGptHome(page.url())) {
     throw new Error("ChatGPT could not open a fresh conversation. Nothing was sent; try again.");
@@ -741,8 +773,14 @@ class ChatGptBrowser {
     this.browserProcess = null;
     this.context = null;
     this.page = null;
+    this.prewarmedPage = null;
+    this.prewarmPromise = null;
+    this.pageCheckout = Promise.resolve();
     this.generationGate = new GenerationGate();
+    this.launchGate = new GenerationGate(1);
+    this.cooldownUntil = 0;
     this.pageCreation = Promise.resolve();
+    this.modelSelection = { label: "ChatGPT web", preferred: false };
     this.lastSessionStatus = {
       ready: false,
       loginRequired: false,
@@ -788,10 +826,19 @@ class ChatGptBrowser {
     if (!this.page.url().startsWith(CHATGPT_URL)) {
       await this.page.goto(CHATGPT_URL, { waitUntil: "domcontentloaded" });
     }
+    if (await chatComposer(this.page).isVisible({ timeout: 1_000 }).catch(() => false)) {
+      this.modelSelection = await selectInstantModel(this.page, (outcome) => {
+        relayLog("browser.model", { outcome });
+      });
+    }
+    await this.ensurePrewarmedPage();
     relayLog("browser.ready", await pageDebugSummary(this.page));
   }
 
   async stop() {
+    await this.prewarmPromise?.catch(() => {});
+    await this.prewarmedPage?.close().catch(() => {});
+    this.prewarmedPage = null;
     await this.browser?.close().catch(() => {});
     if (this.browserProcess?.exitCode === null) this.browserProcess.kill("SIGTERM");
     this.browser = null;
@@ -821,11 +868,7 @@ class ChatGptBrowser {
 
   async ensurePage() {
     if (!this.context) throw new Error("The browser is not running.");
-    if (!this.page || this.page.isClosed()) {
-      const page = findChatGptPage(this.context.pages());
-      if (!page) return null;
-      this.setControllerPage(page);
-    }
+    if (!this.page || this.page.isClosed()) return null;
     return this.page;
   }
 
@@ -850,7 +893,86 @@ class ChatGptBrowser {
     return pending;
   }
 
+  async prepareFreshPage() {
+    const page = await this.createBackgroundPage();
+    try {
+      await openFreshChat(page);
+      if (!(await waitUntilVisible(chatComposer(page), 8_000))) {
+        throw new Error("ChatGPT did not prepare a fresh composer for the relay.");
+      }
+      relayLog("browser.prewarm.ready", await pageDebugSummary(page));
+      return page;
+    } catch (error) {
+      await page.close().catch(() => {});
+      throw error;
+    }
+  }
+
+  async ensurePrewarmedPage() {
+    if (this.prewarmedPage && !this.prewarmedPage.isClosed()) return this.prewarmedPage;
+    if (this.prewarmPromise) return this.prewarmPromise;
+
+    this.prewarmPromise = this.prepareFreshPage()
+      .then((page) => {
+        this.prewarmedPage = page;
+        page.once("close", () => {
+          if (this.prewarmedPage === page) this.prewarmedPage = null;
+        });
+        return page;
+      })
+      .finally(() => {
+        this.prewarmPromise = null;
+      });
+    return this.prewarmPromise;
+  }
+
+  async takeFreshPage() {
+    const take = async () => {
+      const prewarmHit = Boolean(this.prewarmedPage && !this.prewarmedPage.isClosed());
+      const page = await this.ensurePrewarmedPage();
+      if (this.prewarmedPage === page) this.prewarmedPage = null;
+      return { page, prewarmHit };
+    };
+    const pending = this.pageCheckout.then(take, take);
+    this.pageCheckout = pending.then(() => undefined, () => undefined);
+    return pending;
+  }
+
+  discardPrewarmedPage() {
+    const closePage = (page) => {
+      if (!page) return;
+      if (this.prewarmedPage === page) this.prewarmedPage = null;
+      void page.close().catch(() => {});
+    };
+    closePage(this.prewarmedPage);
+    void this.prewarmPromise?.then(closePage).catch(() => {});
+  }
+
+  cooldownStatus(now = Date.now()) {
+    return chatGptCooldownState(this.cooldownUntil, now);
+  }
+
+  cooldownError(now = Date.now()) {
+    const { cooldownRemainingMs, retryAt } = this.cooldownStatus(now);
+    const minutes = Math.max(1, Math.ceil(cooldownRemainingMs / 60_000));
+    const error = new Error(
+      `ChatGPT is cooling down. Arbor will not launch queued prompts for about ${minutes} more minute${minutes === 1 ? "" : "s"}.`,
+    );
+    error.retryAt = retryAt;
+    return error;
+  }
+
+  startCooldown(requestId, now = Date.now()) {
+    this.cooldownUntil = Math.max(this.cooldownUntil, now + CHATGPT_ACCOUNT_COOLDOWN_MS);
+    this.discardPrewarmedPage();
+    relayLog("account.cooldown.started", {
+      requestId,
+      retryAt: new Date(this.cooldownUntil).toISOString(),
+    });
+  }
+
   async status() {
+    const cooldown = this.cooldownStatus();
     try {
       const page = await this.ensurePage();
       if (!page) {
@@ -858,42 +980,51 @@ class ChatGptBrowser {
         return {
           browser: true,
           ...this.lastSessionStatus,
+          ...cooldown,
+          ready: this.lastSessionStatus.ready && !cooldown.rateLimited,
           model: CHATGPT_INSTANT_LABEL,
           busy: this.generationGate.active > 0,
           activeGenerations: this.generationGate.active,
           queuedGenerations: this.generationGate.queued,
+          queuedLaunches: this.launchGate.queued,
           maxConcurrentGenerations: this.generationGate.maxConcurrent,
+          freshChatReady: Boolean(this.prewarmedPage && !this.prewarmedPage.isClosed()),
         };
       }
       const composer = chatComposer(page);
       const composerReady = await composer.isVisible({ timeout: 1_000 }).catch(() => false);
-      // A protection warning remains in the DOM of the conversation that received it.
-      // Treat it as current account state only on the fresh-chat surface; generation
-      // independently checks its own fresh page again before submitting a prompt.
-      const rateLimited = isChatGptHome(page.url()) && await hasRateLimitNotice(page);
+      // ChatGPT can leave a historical protection warning mounted even after the
+      // account has recovered. Do not turn that stale DOM into a client-side
+      // cooldown: each generation checks its own fresh page before and after send.
       this.lastSessionStatus = {
-        ready: composerReady && !rateLimited,
+        ready: composerReady,
         loginRequired: !composerReady,
-        rateLimited,
+        rateLimited: false,
         pageUrl: page.url().startsWith(CHATGPT_URL) ? page.url() : CHATGPT_URL,
       };
       return {
         browser: true,
         ...this.lastSessionStatus,
+        ...cooldown,
+        ready: composerReady && !cooldown.rateLimited,
         model: CHATGPT_INSTANT_LABEL,
         busy: this.generationGate.active > 0,
         activeGenerations: this.generationGate.active,
         queuedGenerations: this.generationGate.queued,
+        queuedLaunches: this.launchGate.queued,
         maxConcurrentGenerations: this.generationGate.maxConcurrent,
+        freshChatReady: Boolean(this.prewarmedPage && !this.prewarmedPage.isClosed()),
       };
     } catch {
       return {
         browser: false,
         ready: false,
         loginRequired: false,
+        ...cooldown,
         busy: this.generationGate.active > 0,
         activeGenerations: this.generationGate.active,
         queuedGenerations: this.generationGate.queued,
+        queuedLaunches: this.launchGate.queued,
         maxConcurrentGenerations: this.generationGate.maxConcurrent,
         pageUrl: CHATGPT_URL,
       };
@@ -902,6 +1033,7 @@ class ChatGptBrowser {
 
   async generate(messages, onEvent, signal, requestId = randomBytes(6).toString("hex")) {
     let acquired = false;
+    let launchAcquired = false;
     let page;
     let stage = "opening ChatGPT";
     let promptSubmitted = false;
@@ -909,6 +1041,7 @@ class ChatGptBrowser {
     let acquiredAt = startedAt;
     let submittedAt = 0;
     let firstSnapshotAt = 0;
+    let prewarmHit = false;
     const setStage = (nextStage) => {
       stage = nextStage;
       relayLog("generation.stage", {
@@ -922,16 +1055,33 @@ class ChatGptBrowser {
 
     try {
       relayLog("generation.queued", { requestId, messageCount: Array.isArray(messages) ? messages.length : 0 });
+      if (this.cooldownStatus().rateLimited) throw this.cooldownError();
       await this.generationGate.acquire(signal);
       acquired = true;
+      setStage("waiting for the previous launch");
+      await this.launchGate.acquire(signal);
+      launchAcquired = true;
+      if (this.cooldownStatus().rateLimited) throw this.cooldownError();
       acquiredAt = Date.now();
       if (!this.context) throw new Error("The browser is not running.");
       if (signal.aborted) throw cancellationError();
-      page = await this.createBackgroundPage();
-      relayLog("generation.page.created", { requestId, ...await pageDebugSummary(page) });
+      ({ page, prewarmHit } = await this.takeFreshPage());
+      relayLog("generation.page.acquired", {
+        requestId,
+        prewarmHit,
+        ...await pageDebugSummary(page),
+      });
 
       setStage("starting a fresh conversation");
-      await openFreshChat(page);
+      const existingMessageCount = await page
+        .locator('[data-message-author-role="user"], [data-message-author-role="assistant"]')
+        .count()
+        .catch(() => -1);
+      if (!isChatGptHome(page.url()) || existingMessageCount !== 0) {
+        throw new Error(
+          "The prewarmed ChatGPT page was no longer a fresh conversation. Nothing was sent; try again.",
+        );
+      }
       if (await hasRateLimitNotice(page)) {
         throw new Error(
           "ChatGPT is temporarily limiting this account. Wait until its warning clears, then try again.",
@@ -950,29 +1100,31 @@ class ChatGptBrowser {
       setStage("selecting preferred model");
       const modelSelection = await selectInstantModel(page, (outcome) => {
         relayLog("generation.model", { requestId, outcome });
-      });
+      }, this.modelSelection);
+      if (modelSelection.preferred) this.modelSelection = modelSelection;
       onEvent({ type: "meta", model: modelSelection.label });
       if (signal.aborted) throw cancellationError();
 
       setStage("preparing the prompt");
       const prompt = buildRelayPrompt(messages);
-      const priorResponseCount = await page.locator('[data-message-author-role="assistant"]').count();
+      const priorResponseCount = 0;
       await composer.fill(prompt);
 
       setStage("submitting the prompt");
       if (signal.aborted) throw cancellationError();
-      const sendButton = page.locator('button[data-testid="send-button"]').first();
-      if (
-        await waitUntilVisible(sendButton, 1_500)
-        && await sendButton.isEnabled().catch(() => false)
-      ) {
-        await sendButton.evaluate((button) => button.click(), undefined, { timeout: 1_500 });
-      } else {
-        await composer.press("Enter", { noWaitAfter: true, timeout: 1_500 });
-      }
+      if (this.cooldownStatus().rateLimited) throw this.cooldownError();
+      await composer.press("Enter", { noWaitAfter: true, timeout: 1_500 });
       promptSubmitted = true;
       submittedAt = Date.now();
       relayLog("generation.submitted", { requestId, model: modelSelection.label });
+      void this.ensurePrewarmedPage().catch((error) => {
+        relayLog("browser.prewarm.failed", {
+          requestId,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      });
+      this.launchGate.release();
+      launchAcquired = false;
 
       setStage("reading the response");
       const responseStartedAt = Date.now();
@@ -1022,6 +1174,7 @@ class ChatGptBrowser {
             submittedAt,
             firstSnapshotAt,
             completedAt,
+            prewarmHit,
           });
           onEvent({ type: "done", text: latest, conversationUrl: page.url(), metrics });
           relayLog("generation.done", {
@@ -1040,6 +1193,7 @@ class ChatGptBrowser {
       throw new Error("ChatGPT did not finish before the relay timeout.");
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : String(error);
+      if (CHATGPT_RATE_LIMIT_PATTERN.test(rawMessage)) this.startCooldown(requestId);
       process.stderr.write(`[Arbor relay] ${stage} failed: ${rawMessage.replace(/\s+/g, " ").slice(0, 800)}\n`);
       relayLog("generation.failed", {
         requestId,
@@ -1060,6 +1214,7 @@ class ChatGptBrowser {
       throw wrapped;
     } finally {
       await page?.close().catch(() => {});
+      if (launchAcquired) this.launchGate.release();
       if (acquired) this.generationGate.release();
       await this.cleanupIdleBlankPages();
     }

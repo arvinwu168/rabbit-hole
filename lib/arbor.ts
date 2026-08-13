@@ -14,8 +14,10 @@ export type RelayLatencyMetrics = {
   relayOverheadMs: number;
   relayTotalMs: number;
   stabilityWindowMs: number;
+  prewarmHit?: boolean;
   endToEndMs?: number;
   arborOverheadMs?: number;
+  arborClientMs?: number;
 };
 
 export type TurnNode = {

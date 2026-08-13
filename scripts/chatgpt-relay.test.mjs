@@ -7,6 +7,7 @@ import {
   CHATGPT_COMPOSER_SELECTOR,
   CHATGPT_INSTANT_LABEL,
   CHATGPT_RATE_LIMIT_PATTERN,
+  chatGptCooldownState,
   existingChromeDebugEndpoint,
   ensureChromePageTarget,
   findChatGptPage,
@@ -114,6 +115,19 @@ test("the relay targets ChatGPT Instant and recognizes the account protection wa
   );
 });
 
+test("the account cooldown exposes a stable retry time and expires cleanly", () => {
+  assert.deepEqual(chatGptCooldownState(4_600_000, 1_000_000), {
+    rateLimited: true,
+    cooldownRemainingMs: 3_600_000,
+    retryAt: "1970-01-01T01:16:40.000Z",
+  });
+  assert.deepEqual(chatGptCooldownState(4_600_000, 4_600_000), {
+    rateLimited: false,
+    cooldownRemainingMs: 0,
+    retryAt: null,
+  });
+});
+
 test("Instant is preferred but an unavailable model picker does not block generation", async () => {
   const unavailable = {
     first: () => unavailable,
@@ -133,6 +147,34 @@ test("Instant is preferred but an unavailable model picker does not block genera
 
   assert.deepEqual(result, { label: "ChatGPT web", preferred: false });
   assert.deepEqual(diagnostics, ["model-switcher-unavailable"]);
+});
+
+test("fresh tabs inherit a verified Instant session without reopening the picker", async () => {
+  let lookupCount = 0;
+  const unavailable = {
+    first: () => unavailable,
+    filter: () => unavailable,
+    waitFor: async () => { throw new Error("not visible"); },
+    isVisible: async () => false,
+    innerText: async () => { throw new Error("not visible"); },
+  };
+  const diagnostics = [];
+  const page = {
+    getByRole: () => { lookupCount += 1; return unavailable; },
+    locator: () => { lookupCount += 1; return unavailable; },
+    keyboard: { press: async () => {} },
+  };
+  const knownSelection = { label: "Instant", preferred: true };
+
+  const result = await selectInstantModel(
+    page,
+    (outcome) => diagnostics.push(outcome),
+    knownSelection,
+  );
+
+  assert.deepEqual(result, knownSelection);
+  assert.deepEqual(diagnostics, ["instant-inherited-from-session"]);
+  assert.equal(lookupCount, 0);
 });
 
 test("relay diagnostics are structured JSON lines", () => {
@@ -168,6 +210,7 @@ test("latency metrics separate relay overhead from observed ChatGPT time", () =>
       relayOverheadMs: 2_000,
       relayTotalMs: 3_800,
       stabilityWindowMs: 450,
+      prewarmHit: false,
     },
   );
 });
@@ -179,7 +222,7 @@ test("only the ChatGPT root URL counts as a fresh conversation", () => {
   assert.equal(isChatGptHome("https://example.com/"), false);
 });
 
-test("fresh-chat navigation always loads the root and verifies that it is empty", async () => {
+test("fresh-chat preparation navigates an existing conversation to an empty root", async () => {
   let currentUrl = "https://chatgpt.com/c/existing";
   let navigationOptions;
   const page = {
@@ -195,6 +238,19 @@ test("fresh-chat navigation always loads the root and verifies that it is empty"
 
   assert.deepEqual(navigationOptions, { waitUntil: "domcontentloaded", timeout: 10_000 });
   assert.equal(currentUrl, "https://chatgpt.com/");
+});
+
+test("fresh-chat preparation does not reload an already empty root", async () => {
+  let navigations = 0;
+  const page = {
+    url: () => "https://chatgpt.com/",
+    locator: () => ({ count: async () => 0 }),
+    goto: async () => { navigations += 1; },
+  };
+
+  await openFreshChat(page);
+
+  assert.equal(navigations, 0);
 });
 
 test("the relay reuses an existing dedicated Chrome debugging endpoint", async () => {
@@ -275,6 +331,25 @@ test("generation concurrency is bounded and overflow waits locally", async () =>
   gate.release();
   gate.release();
   assert.equal(gate.active, 0);
+});
+
+test("a single-slot launch gate serializes prompt setup without rejecting queued work", async () => {
+  const launchGate = new GenerationGate(1);
+  await launchGate.acquire();
+
+  let secondLaunchStarted = false;
+  const secondLaunch = launchGate.acquire().then(() => {
+    secondLaunchStarted = true;
+  });
+  await Promise.resolve();
+
+  assert.equal(secondLaunchStarted, false);
+  assert.equal(launchGate.queued, 1);
+
+  launchGate.release();
+  await secondLaunch;
+  assert.equal(secondLaunchStarted, true);
+  launchGate.release();
 });
 
 test("a cancelled queued generation is removed without consuming a slot", async () => {
