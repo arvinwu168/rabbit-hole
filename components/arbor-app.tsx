@@ -19,7 +19,7 @@ import {
   SquarePen,
   X,
 } from "lucide-react";
-import { FormEvent, MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import { FormEvent, MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import {
   ChatTree,
@@ -216,6 +216,15 @@ export function ArborApp() {
     }, 120);
     return () => window.clearTimeout(timeout);
   }, [hydrated, workspace]);
+
+  useLayoutEffect(() => {
+    const composer = composerRef.current;
+    if (!composer) return;
+
+    composer.style.height = "auto";
+    composer.style.height = `${Math.min(composer.scrollHeight, 200)}px`;
+    composer.style.overflowY = composer.scrollHeight > 200 ? "auto" : "hidden";
+  }, [composerValue]);
 
   useEffect(() => {
     if (!activeNode) return;

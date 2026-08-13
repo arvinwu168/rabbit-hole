@@ -484,6 +484,8 @@ button:disabled {
   border: 1px solid #e8eae4;
   border-radius: 15px 15px 4px 15px;
   line-height: 1.52;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 .assistant-message {
@@ -804,11 +806,11 @@ button:disabled {
 .composer textarea {
   min-width: 0;
   min-height: 42px;
-  max-height: 150px;
+  max-height: 200px;
   flex: 1;
   resize: none;
   padding: 10px 4px 6px;
-  overflow-y: auto;
+  overflow-y: hidden;
   color: var(--ink);
   background: transparent;
   border: 0;
