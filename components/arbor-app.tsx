@@ -750,7 +750,7 @@ export function ArborApp() {
     chatId: string,
     nodeId: string,
     prompt: string,
-    messages: Array<{ role: "user" | "assistant"; content: string }>,
+    messages: Array<{ role: "user" | "assistant"; content: string; anchor?: string }>,
     anchor?: string,
   ) {
     try {
@@ -892,11 +892,23 @@ export function ArborApp() {
       anchor,
     };
     const parentPath = getNodePath(activeChat, parentId);
-    const messages = parentPath.flatMap((node) => [
-      { role: "user" as const, content: node.prompt },
+    const messages: Array<{
+      role: "user" | "assistant";
+      content: string;
+      anchor?: string;
+    }> = parentPath.flatMap((node) => [
+      {
+        role: "user" as const,
+        content: node.prompt,
+        ...(node.anchor?.quote ? { anchor: node.anchor.quote } : {}),
+      },
       { role: "assistant" as const, content: node.response },
     ]);
-    messages.push({ role: "user", content: prompt });
+    messages.push({
+      role: "user",
+      content: prompt,
+      ...(anchor?.quote ? { anchor: anchor.quote } : {}),
+    });
 
     setWorkspace((current) => ({
       ...current,
