@@ -45,6 +45,7 @@ import remarkGfm from "remark-gfm";
 import {
   ChatTree,
   QuoteAnchor,
+  RelayLatencyMetrics,
   TurnNode,
   WorkspaceState,
   createEmptyWorkspace,
@@ -409,6 +410,33 @@ function ProviderIdentity({ model }: { model: string }) {
       <span className="response-provider-name">{provider}</span>
       {details ? <span className="model-name">{details}</span> : null}
     </>
+  );
+}
+
+function formatLatency(milliseconds: number): string {
+  return milliseconds < 1_000
+    ? `${Math.round(milliseconds)} ms`
+    : `${(milliseconds / 1_000).toFixed(1)} s`;
+}
+
+function LatencySummary({ metrics }: { metrics: RelayLatencyMetrics }) {
+  const endToEndMs = metrics.endToEndMs ?? metrics.relayTotalMs;
+  const arborOverheadMs = metrics.arborOverheadMs ?? metrics.relayOverheadMs;
+  const details = [
+    `Queue: ${formatLatency(metrics.queueMs)}`,
+    `Browser setup: ${formatLatency(metrics.browserSetupMs)}`,
+    `ChatGPT first text: ${formatLatency(metrics.chatgptTimeToFirstTextMs)}`,
+    `ChatGPT generation/capture: ${formatLatency(metrics.chatgptGenerationMs)}`,
+    `Capture stability window: ${formatLatency(metrics.stabilityWindowMs)}`,
+  ].join(" · ");
+
+  return (
+    <span className="latency-summary" title={details} aria-label={`Latency: ${details}`}>
+      <Clock3 size={11} />
+      <span>E2E {formatLatency(endToEndMs)}</span>
+      <span>ChatGPT {formatLatency(metrics.chatgptObservedMs)}</span>
+      <span>Arbor {formatLatency(arborOverheadMs)}</span>
+    </span>
   );
 }
 
@@ -1137,6 +1165,9 @@ export function ArborApp() {
     anchor?: string,
     fixtureId?: MockFixtureId,
   ) {
+    // This runs only after a submit event and measures the local request lifecycle.
+    // eslint-disable-next-line react-hooks/purity
+    const requestStartedAt = Date.now();
     try {
       const usingRelay = inferenceProvider === "chatgpt-relay";
       if (usingRelay && relayStatus !== "ready") {
@@ -1194,6 +1225,7 @@ export function ArborApp() {
               text?: string;
               error?: string;
               model?: string;
+              metrics?: RelayLatencyMetrics;
               conversationUrl?: string;
               promptSubmitted?: boolean;
             };
@@ -1206,9 +1238,21 @@ export function ArborApp() {
             }
             if ((event.type === "snapshot" || event.type === "done") && typeof event.text === "string") {
               content = event.text;
+              // This runs while consuming the response stream, outside render.
+              // eslint-disable-next-line react-hooks/purity
+              const endToEndMs = Date.now() - requestStartedAt;
               updateNode(chatId, nodeId, {
                 response: content,
                 ...(event.conversationUrl ? { providerConversationUrl: event.conversationUrl } : {}),
+                ...(event.metrics
+                  ? {
+                      latency: {
+                        ...event.metrics,
+                        endToEndMs,
+                        arborOverheadMs: Math.max(0, endToEndMs - event.metrics.chatgptObservedMs),
+                      },
+                    }
+                  : {}),
               });
             }
             if (event.type === "done") completed = true;
@@ -1685,6 +1729,9 @@ export function ArborApp() {
                     <div className="assistant-message">
                       <div className="assistant-head">
                         <ProviderIdentity model={node.model} />
+                        {IS_DEVELOPMENT && devMode && node.latency ? (
+                          <LatencySummary metrics={node.latency} />
+                        ) : null}
                         {node.status === "complete" && node.providerConversationUrl ? (
                           <a
                             className="response-source-link"

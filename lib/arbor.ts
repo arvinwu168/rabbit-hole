@@ -5,6 +5,19 @@ export type QuoteAnchor = {
   quote: string;
 };
 
+export type RelayLatencyMetrics = {
+  queueMs: number;
+  browserSetupMs: number;
+  chatgptTimeToFirstTextMs: number;
+  chatgptGenerationMs: number;
+  chatgptObservedMs: number;
+  relayOverheadMs: number;
+  relayTotalMs: number;
+  stabilityWindowMs: number;
+  endToEndMs?: number;
+  arborOverheadMs?: number;
+};
+
 export type TurnNode = {
   id: string;
   parentId: string | null;
@@ -15,6 +28,7 @@ export type TurnNode = {
   model: string;
   anchor?: QuoteAnchor;
   providerConversationUrl?: string;
+  latency?: RelayLatencyMetrics;
 };
 
 export type ChatTree = {

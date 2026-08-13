@@ -673,6 +673,21 @@ button:disabled {
   font-size: 10.5px;
 }
 
+.latency-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--ink-faint);
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.latency-summary span + span::before {
+  margin-right: 5px;
+  color: var(--line-strong);
+  content: "·";
+}
+
 .response-source-link {
   display: inline-flex;
   align-items: center;

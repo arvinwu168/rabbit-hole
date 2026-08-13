@@ -40,6 +40,23 @@ export function formatRelayLogEntry(timestamp, event, details = {}) {
   return `${JSON.stringify({ timestamp, event, ...details })}\n`;
 }
 
+export function buildLatencyMetrics({ startedAt, acquiredAt, submittedAt, firstSnapshotAt, completedAt }) {
+  const firstTextAt = firstSnapshotAt ?? completedAt;
+  const chatgptObservedMs = Math.max(0, completedAt - submittedAt);
+  const relayTotalMs = Math.max(0, completedAt - startedAt);
+
+  return {
+    queueMs: Math.max(0, acquiredAt - startedAt),
+    browserSetupMs: Math.max(0, submittedAt - acquiredAt),
+    chatgptTimeToFirstTextMs: Math.max(0, firstTextAt - submittedAt),
+    chatgptGenerationMs: Math.max(0, completedAt - firstTextAt),
+    chatgptObservedMs,
+    relayOverheadMs: Math.max(0, relayTotalMs - chatgptObservedMs),
+    relayTotalMs,
+    stabilityWindowMs: RESPONSE_STABILITY_MS,
+  };
+}
+
 function configureRelayLog(path) {
   relayLogPath = path;
   mkdirSync(dirname(path), { recursive: true });
@@ -850,7 +867,10 @@ class ChatGptBrowser {
       }
       const composer = chatComposer(page);
       const composerReady = await composer.isVisible({ timeout: 1_000 }).catch(() => false);
-      const rateLimited = await hasRateLimitNotice(page);
+      // A protection warning remains in the DOM of the conversation that received it.
+      // Treat it as current account state only on the fresh-chat surface; generation
+      // independently checks its own fresh page again before submitting a prompt.
+      const rateLimited = isChatGptHome(page.url()) && await hasRateLimitNotice(page);
       this.lastSessionStatus = {
         ready: composerReady && !rateLimited,
         loginRequired: !composerReady,
@@ -886,6 +906,9 @@ class ChatGptBrowser {
     let stage = "opening ChatGPT";
     let promptSubmitted = false;
     const startedAt = Date.now();
+    let acquiredAt = startedAt;
+    let submittedAt = 0;
+    let firstSnapshotAt = 0;
     const setStage = (nextStage) => {
       stage = nextStage;
       relayLog("generation.stage", {
@@ -901,6 +924,7 @@ class ChatGptBrowser {
       relayLog("generation.queued", { requestId, messageCount: Array.isArray(messages) ? messages.length : 0 });
       await this.generationGate.acquire(signal);
       acquired = true;
+      acquiredAt = Date.now();
       if (!this.context) throw new Error("The browser is not running.");
       if (signal.aborted) throw cancellationError();
       page = await this.createBackgroundPage();
@@ -947,6 +971,7 @@ class ChatGptBrowser {
         await composer.press("Enter", { noWaitAfter: true, timeout: 1_500 });
       }
       promptSubmitted = true;
+      submittedAt = Date.now();
       relayLog("generation.submitted", { requestId, model: modelSelection.label });
 
       setStage("reading the response");
@@ -974,9 +999,11 @@ class ChatGptBrowser {
           onEvent({ type: "snapshot", text: latest });
           if (!firstSnapshotLogged) {
             firstSnapshotLogged = true;
+            firstSnapshotAt = Date.now();
             relayLog("generation.first-snapshot", {
               requestId,
-              elapsedMs: Date.now() - startedAt,
+              elapsedMs: firstSnapshotAt - startedAt,
+              sinceSubmitMs: firstSnapshotAt - submittedAt,
               characters: latest.length,
             });
           }
@@ -988,12 +1015,21 @@ class ChatGptBrowser {
           .isVisible()
           .catch(() => false);
         if (latest && !stopVisible && stableSince && Date.now() - stableSince > RESPONSE_STABILITY_MS) {
-          onEvent({ type: "done", text: latest, conversationUrl: page.url() });
+          const completedAt = Date.now();
+          const metrics = buildLatencyMetrics({
+            startedAt,
+            acquiredAt,
+            submittedAt,
+            firstSnapshotAt,
+            completedAt,
+          });
+          onEvent({ type: "done", text: latest, conversationUrl: page.url(), metrics });
           relayLog("generation.done", {
             requestId,
-            elapsedMs: Date.now() - startedAt,
+            elapsedMs: completedAt - startedAt,
             characters: latest.length,
             model: modelSelection.label,
+            metrics,
           });
           return;
         }

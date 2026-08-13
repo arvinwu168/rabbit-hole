@@ -2,6 +2,7 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import {
   backgroundTargetOptions,
+  buildLatencyMetrics,
   buildRelayPrompt,
   CHATGPT_COMPOSER_SELECTOR,
   CHATGPT_INSTANT_LABEL,
@@ -147,6 +148,28 @@ test("relay diagnostics are structured JSON lines", () => {
     stage: "finding the composer",
   });
   assert.ok(entry.endsWith("\n"));
+});
+
+test("latency metrics separate relay overhead from observed ChatGPT time", () => {
+  assert.deepEqual(
+    buildLatencyMetrics({
+      startedAt: 1_000,
+      acquiredAt: 1_100,
+      submittedAt: 3_000,
+      firstSnapshotAt: 3_700,
+      completedAt: 4_800,
+    }),
+    {
+      queueMs: 100,
+      browserSetupMs: 1_900,
+      chatgptTimeToFirstTextMs: 700,
+      chatgptGenerationMs: 1_100,
+      chatgptObservedMs: 1_800,
+      relayOverheadMs: 2_000,
+      relayTotalMs: 3_800,
+      stabilityWindowMs: 450,
+    },
+  );
 });
 
 test("only the ChatGPT root URL counts as a fresh conversation", () => {
