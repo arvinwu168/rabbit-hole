@@ -155,6 +155,49 @@ function StatusMark({ status }: { status: TurnNode["status"] }) {
   return null;
 }
 
+function UserPrompt({ prompt }: { prompt: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const [canCollapse, setCanCollapse] = useState(false);
+  const viewportRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    const viewport = viewportRef.current;
+    if (!viewport) return;
+
+    const measure = () => {
+      const lineHeight = Number.parseFloat(window.getComputedStyle(viewport).lineHeight);
+      const collapsedHeight = lineHeight * 8;
+      setCanCollapse(viewport.scrollHeight > collapsedHeight + 1);
+    };
+
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(viewport);
+    return () => observer.disconnect();
+  }, [prompt]);
+
+  return (
+    <div className="user-bubble">
+      <div
+        ref={viewportRef}
+        className={`user-prompt-viewport ${canCollapse && !expanded ? "is-collapsed" : ""}`}
+      >
+        {prompt}
+      </div>
+      {canCollapse ? (
+        <button
+          type="button"
+          className="user-prompt-toggle"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {expanded ? "Show less" : "Show more"}
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
 export function ArborApp() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => cloneSeedWorkspace());
   const [hydrated, setHydrated] = useState(false);
@@ -573,7 +616,7 @@ export function ArborApp() {
                           <span>“{node.anchor.quote}”</span>
                         </div>
                       ) : null}
-                      <div className="user-bubble">{node.prompt}</div>
+                      <UserPrompt prompt={node.prompt} />
                     </div>
 
                     <div className="assistant-message">
