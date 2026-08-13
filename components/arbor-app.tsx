@@ -10,6 +10,7 @@ import {
   GitBranch,
   Leaf,
   LoaderCircle,
+  LogIn,
   MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
@@ -19,6 +20,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   SquarePen,
+  UserRound,
   X,
   Zap,
 } from "lucide-react";
@@ -38,14 +40,27 @@ import {
   QuoteAnchor,
   TurnNode,
   WorkspaceState,
-  cloneSeedWorkspace,
+  createEmptyWorkspace,
   getAncestorIds,
   getChildren,
   getNodePath,
   makeChatTitle,
 } from "@/lib/arbor";
+import { createRandomDemoChats } from "@/lib/demo-trees";
+import {
+  MOCK_FIXTURES,
+  getMockFixtureSelection,
+  type MockFixtureId,
+  type MockFixtureSelection,
+} from "@/lib/mock-fixtures";
 
-const STORAGE_KEY = "arbor-workspace-v1";
+const LEGACY_WORKSPACE_STORAGE_KEY = "arbor-workspace-v1";
+const GUEST_WORKSPACE_STORAGE_KEY = "arbor-guest-workspace-v1";
+const LEGACY_DEMO_CHAT_IDS = new Set([
+  "chat-free-tier",
+  "chat-onboarding",
+  "chat-conference",
+]);
 const MODEL_CONTROLS_STORAGE_KEY = "arbor-model-controls-visible";
 const DEV_MODE_STORAGE_KEY = "arbor-dev-mode";
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
@@ -71,6 +86,143 @@ const INFERENCE_OPTIONS: Record<
 const MAX_TOKEN_OPTIONS = [128, 256, 512, 1024] as const;
 type TokenLimit = "automatic" | (typeof MAX_TOKEN_OPTIONS)[number];
 
+type ComposerCommandOption = {
+  id: string;
+  command: string;
+  label: string;
+  description: string;
+  action:
+    | "open-fixtures"
+    | "open-demos"
+    | "show-help"
+    | "select-fixture"
+    | "demo-tree"
+    | "demo-forest";
+  fixture?: MockFixtureSelection;
+};
+
+const DEMO_COMMANDS: ComposerCommandOption[] = [
+  {
+    id: "demo-tree",
+    command: "/demo tree",
+    label: "Generate one tree",
+    description: "Add one randomized conversation tree without calling a model.",
+    action: "demo-tree",
+  },
+  {
+    id: "demo-forest",
+    command: "/demo forest",
+    label: "Generate a forest",
+    description: "Add several randomized conversation trees without calling a model.",
+    action: "demo-forest",
+  },
+];
+
+const ROOT_COMMANDS: ComposerCommandOption[] = [
+  {
+    id: "fixture-picker",
+    command: "/fixture",
+    label: "Choose a mock fixture",
+    description: "Run a deterministic Mock response as an immediate test turn.",
+    action: "open-fixtures",
+  },
+  {
+    id: "demo-picker",
+    command: "/demo",
+    label: "Generate demo conversations",
+    description: "Choose a randomized tree or multi-tree workspace.",
+    action: "open-demos",
+  },
+  {
+    id: "fixture-help",
+    command: "/help",
+    label: "Developer command help",
+    description: "Return the current commands and fixture rules as a local help response.",
+    action: "show-help",
+  },
+];
+
+function fixtureCommandOptions(query: string): ComposerCommandOption[] {
+  const normalizedQuery = query.trim().toLowerCase();
+
+  return MOCK_FIXTURES.filter((fixture) => {
+    if (!normalizedQuery) return true;
+    const searchable = [fixture.command, fixture.label, fixture.description, ...fixture.keywords]
+      .join(" ")
+      .toLowerCase();
+    return searchable.includes(normalizedQuery);
+  }).map((fixture) => ({
+    id: `fixture-${fixture.id}`,
+    command: `/fixture ${fixture.command}`,
+    label: fixture.label,
+    description: fixture.description,
+    action: "select-fixture" as const,
+    fixture,
+  }));
+}
+
+function demoCommandOptions(query: string): ComposerCommandOption[] {
+  const normalizedQuery = query.trim().toLowerCase();
+  if (!normalizedQuery) return DEMO_COMMANDS;
+
+  return DEMO_COMMANDS.filter((option) =>
+    `${option.command} ${option.label} ${option.description}`
+      .toLowerCase()
+      .includes(normalizedQuery),
+  );
+}
+
+function composerCommandOptions(value: string): ComposerCommandOption[] {
+  const command = value.trimStart().toLowerCase();
+  if (!command.startsWith("/")) return [];
+
+  if (command.startsWith("/fixture")) {
+    return fixtureCommandOptions(command.slice("/fixture".length));
+  }
+
+  if (command.startsWith("/demo")) {
+    return demoCommandOptions(command.slice("/demo".length));
+  }
+
+  if (command.startsWith("/help")) {
+    return ROOT_COMMANDS.filter((option) => option.action === "show-help");
+  }
+
+  const query = command.slice(1);
+  return ROOT_COMMANDS.filter((option) =>
+    `${option.command} ${option.label} ${option.description}`.toLowerCase().includes(query),
+  );
+}
+
+function developerHelpResponse(): string {
+  const fixtures = MOCK_FIXTURES.map(
+    (fixture) => `- \`/fixture ${fixture.command}\` — ${fixture.description}`,
+  );
+
+  return [
+    "# Developer commands",
+    "",
+    "Type `/` to open the command palette. Use ↑/↓ to select, Enter to run, and Esc to close it.",
+    "",
+    "## Workspace generators",
+    "",
+    "- `/demo tree` — add one randomized conversation tree.",
+    "- `/demo forest` — add several randomized conversation trees.",
+    "",
+    "## Mock fixtures",
+    "",
+    ...fixtures,
+    "",
+    "## Rules",
+    "",
+    "- Selecting a fixture immediately adds its command as a test turn and streams the response.",
+    "- Demo generators are additive: existing chats stay in the workspace.",
+    "- `/fixture anchored` requires an active quote: select response text and choose **Branch from selection** first.",
+    "- Demo, fixture, and help responses are local and consume no model tokens.",
+    "- `/help` returns this message and does not call an inference provider.",
+  ].join("\n");
+}
+
 function inferenceLabel(provider: InferenceProvider, maxTokens?: number): string {
   const option = INFERENCE_OPTIONS[provider];
   const tokenLabel = provider === "groq" && maxTokens ? ` · max ${maxTokens}` : "";
@@ -81,8 +233,14 @@ function responseInferenceLabel(headers: Headers, fallback: string): string {
   const provider = headers.get("X-Arbor-Provider");
   const model = headers.get("X-Arbor-Model");
   const maxTokens = headers.get("X-Arbor-Max-Tokens");
+  const fixture = headers.get("X-Arbor-Fixture");
 
   if (!provider || !model) return fallback;
+
+  if (fixture) {
+    const fixtureSelection = getMockFixtureSelection(fixture);
+    if (fixtureSelection) return `${provider} · ${fixtureSelection.label}`;
+  }
 
   const modelLabel =
     model === "openai/gpt-oss-120b" ? "GPT-OSS 120B" : model === "simulated" ? "Simulated" : model;
@@ -578,15 +736,13 @@ function BranchShelf({
 }
 
 export function ArborApp() {
-  const [workspace, setWorkspace] = useState<WorkspaceState>(() => cloneSeedWorkspace());
+  const [workspace, setWorkspace] = useState<WorkspaceState>(() => createEmptyWorkspace());
   const [hydrated, setHydrated] = useState(false);
-  const [expandedIds, setExpandedIds] = useState<Set<string>>(
-    () => new Set(["free-root", "free-acquisition", "free-activation"]),
-  );
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
   const [composerValue, setComposerValue] = useState("");
   const [branchContext, setBranchContext] = useState<BranchContext | null>(null);
   const [selection, setSelection] = useState<TextSelection | null>(null);
-  const [newChatMode, setNewChatMode] = useState(false);
+  const [newChatMode, setNewChatMode] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
   const [openBranchMenuId, setOpenBranchMenuId] = useState<string | null>(null);
@@ -594,6 +750,11 @@ export function ArborApp() {
   const [maxTokens, setMaxTokens] = useState<TokenLimit>("automatic");
   const [modelControlsVisible, setModelControlsVisible] = useState(true);
   const [devMode, setDevMode] = useState(false);
+  const [pendingFixtureId, setPendingFixtureId] = useState<MockFixtureId | null>(null);
+  const [pendingHelp, setPendingHelp] = useState(false);
+  const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
+  const [commandPaletteDismissed, setCommandPaletteDismissed] = useState(false);
+  const [signInOpen, setSignInOpen] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -611,18 +772,53 @@ export function ArborApp() {
   );
   const selectedInference = INFERENCE_OPTIONS[inferenceProvider];
   const effectiveMaxTokens = devMode && typeof maxTokens === "number" ? maxTokens : undefined;
-  const selectedInferenceLabel = inferenceLabel(inferenceProvider, effectiveMaxTokens);
+  const pendingFixture = pendingFixtureId ? getMockFixtureSelection(pendingFixtureId) : undefined;
+  const selectedInferenceLabel =
+    inferenceProvider === "mock" && pendingFixture
+      ? `Mock · ${pendingFixture.label}`
+      : inferenceLabel(inferenceProvider, effectiveMaxTokens);
+  const isCommandInput =
+    IS_DEVELOPMENT && devMode && composerValue.trimStart().startsWith("/");
+  const commandOptions = useMemo(
+    () => (isCommandInput && !commandPaletteDismissed ? composerCommandOptions(composerValue) : []),
+    [commandPaletteDismissed, composerValue, isCommandInput],
+  );
+  const commandPaletteVisible = isCommandInput && !commandPaletteDismissed;
+
+  useEffect(() => {
+    const pendingCommand = pendingHelp
+      ? "/help"
+      : pendingFixture
+        ? `/fixture ${pendingFixture.command}`
+        : undefined;
+    if (!pendingCommand || composerValue !== pendingCommand) return;
+
+    const frame = window.requestAnimationFrame(() => {
+      composerRef.current?.form?.requestSubmit();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [composerValue, pendingFixture, pendingHelp]);
 
   useEffect(() => {
     let restored: WorkspaceState | null = null;
     let restoredModelControlsVisibility: boolean | null = null;
     let restoredDevMode = false;
     try {
-      const saved = window.localStorage.getItem(STORAGE_KEY);
+      window.localStorage.removeItem(LEGACY_WORKSPACE_STORAGE_KEY);
+
+      const saved = window.sessionStorage.getItem(GUEST_WORKSPACE_STORAGE_KEY);
       if (saved) {
         const parsed = JSON.parse(saved) as WorkspaceState;
-        if (parsed.chats?.length && parsed.activeChatId && parsed.activeNodeId) {
-          restored = parsed;
+        const chats = parsed.chats?.filter((chat) => !LEGACY_DEMO_CHAT_IDS.has(chat.id)) ?? [];
+        if (chats.length) {
+          const activeChat = chats.find((chat) => chat.id === parsed.activeChatId) ?? chats[0];
+          restored = {
+            chats,
+            activeChatId: activeChat.id,
+            activeNodeId: activeChat.nodes[parsed.activeNodeId]
+              ? parsed.activeNodeId
+              : activeChat.rootNodeId,
+          };
         }
       }
       const savedModelControlsVisibility = window.localStorage.getItem(MODEL_CONTROLS_STORAGE_KEY);
@@ -632,15 +828,14 @@ export function ArborApp() {
       if (IS_DEVELOPMENT) {
         restoredDevMode = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "true";
       }
-    } catch {
-      window.localStorage.removeItem(STORAGE_KEY);
-    }
+    } catch {}
 
     const frame = window.requestAnimationFrame(() => {
       if (restored) {
         setWorkspace(restored);
         const chat = restored.chats.find((item) => item.id === restored?.activeChatId);
         if (chat) setExpandedIds(new Set(getAncestorIds(chat, restored.activeNodeId)));
+        setNewChatMode(false);
       }
       if (restoredModelControlsVisibility !== null) {
         setModelControlsVisible(restoredModelControlsVisibility);
@@ -655,7 +850,10 @@ export function ArborApp() {
   useEffect(() => {
     if (!hydrated) return;
     const timeout = window.setTimeout(() => {
-      window.localStorage.setItem(STORAGE_KEY, JSON.stringify(workspace));
+      window.sessionStorage.setItem(
+        GUEST_WORKSPACE_STORAGE_KEY,
+        JSON.stringify(workspace),
+      );
     }, 120);
     return () => window.clearTimeout(timeout);
   }, [hydrated, workspace]);
@@ -669,6 +867,22 @@ export function ArborApp() {
     if (!hydrated || !IS_DEVELOPMENT) return;
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, String(devMode));
   }, [devMode, hydrated]);
+
+  useEffect(() => {
+    if (!signInOpen) return;
+
+    const previousOverflow = document.body.style.overflow;
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setSignInOpen(false);
+    };
+
+    document.body.style.overflow = "hidden";
+    document.addEventListener("keydown", closeOnEscape);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      document.removeEventListener("keydown", closeOnEscape);
+    };
+  }, [signInOpen]);
 
   useLayoutEffect(() => {
     const composer = composerRef.current;
@@ -752,6 +966,7 @@ export function ArborApp() {
     prompt: string,
     messages: Array<{ role: "user" | "assistant"; content: string; anchor?: string }>,
     anchor?: string,
+    fixtureId?: MockFixtureId,
   ) {
     try {
       const response = await fetch("/api/chat", {
@@ -764,6 +979,7 @@ export function ArborApp() {
           provider: inferenceProvider,
           devMode: IS_DEVELOPMENT && devMode,
           ...(effectiveMaxTokens ? { maxTokens: effectiveMaxTokens } : {}),
+          ...(fixtureId ? { fixtureId } : {}),
         }),
       });
 
@@ -835,24 +1051,109 @@ export function ArborApp() {
     }
   }
 
+  function runComposerCommand(option: ComposerCommandOption) {
+    if (option.action === "open-fixtures") {
+      setComposerValue("/fixture ");
+      setSelectedCommandIndex(0);
+      setCommandPaletteDismissed(false);
+      window.setTimeout(() => composerRef.current?.focus(), 0);
+      return;
+    }
+
+    if (option.action === "open-demos") {
+      setComposerValue("/demo ");
+      setSelectedCommandIndex(0);
+      setCommandPaletteDismissed(false);
+      window.setTimeout(() => composerRef.current?.focus(), 0);
+      return;
+    }
+
+    if (option.action === "demo-tree" || option.action === "demo-forest") {
+      const chats = createRandomDemoChats(option.action === "demo-tree" ? 1 : 3);
+      const activeChat = chats[0];
+      const activeNodes = Object.values(activeChat.nodes);
+      const activeNode = activeNodes[activeNodes.length - 1];
+
+      setWorkspace((current) => ({
+        chats: [...chats, ...current.chats],
+        activeChatId: activeChat.id,
+        activeNodeId: activeNode.id,
+      }));
+      setExpandedIds((current) =>
+        new Set([
+          ...current,
+          ...chats.flatMap((chat) => Object.keys(chat.nodes)),
+        ]),
+      );
+      setNewChatMode(false);
+      setBranchContext(null);
+      setSelection(null);
+      setOpenBranchMenuId(null);
+      setPendingHelp(false);
+      setPendingFixtureId(null);
+      setComposerValue("");
+      setSelectedCommandIndex(0);
+      setCommandPaletteDismissed(true);
+      return;
+    }
+
+    if (option.action === "show-help") {
+      setPendingHelp(true);
+      setPendingFixtureId(null);
+      setComposerValue("/help");
+      setSelectedCommandIndex(0);
+      setCommandPaletteDismissed(true);
+      return;
+    }
+
+    if (!option.fixture) return;
+
+    setDevMode(true);
+    setModelControlsVisible(true);
+    setInferenceProvider("mock");
+    setPendingHelp(false);
+    setPendingFixtureId(option.fixture.id);
+    setComposerValue(option.command);
+    setSelectedCommandIndex(0);
+    setCommandPaletteDismissed(true);
+  }
+
   async function submitPrompt(event: FormEvent) {
     event.preventDefault();
     const prompt = composerValue.trim();
     if (!prompt || isGenerating) return;
+
+    if (isCommandInput && !pendingFixtureId && !pendingHelp) {
+      const selectedOption = commandOptions[selectedCommandIndex] ?? commandOptions[0];
+      if (selectedOption) runComposerCommand(selectedOption);
+      return;
+    }
+
+    const fixtureId = pendingFixtureId ?? undefined;
+    const helpResponse = pendingHelp ? developerHelpResponse() : undefined;
+    const requestInferenceLabel = helpResponse
+      ? "Arbor · Help"
+      : fixtureId
+        ? `Mock · ${getMockFixtureSelection(fixtureId)?.label ?? fixtureId}`
+        : selectedInferenceLabel;
     setComposerValue("");
+    setPendingFixtureId(null);
+    setPendingHelp(false);
 
     if (newChatMode || !activeChat || !activeNode) {
       const chatId = crypto.randomUUID();
       const nodeId = crypto.randomUUID();
+      // This runs only after a submit event; the timestamp is stored with the new node.
+      // eslint-disable-next-line react-hooks/purity
       const now = Date.now();
       const rootNode: TurnNode = {
         id: nodeId,
         parentId: null,
         prompt,
-        response: "",
-        status: "streaming",
+        response: helpResponse ?? "",
+        status: helpResponse ? "complete" : "streaming",
         createdAt: now,
-        model: selectedInferenceLabel,
+        model: requestInferenceLabel,
       };
       const chat: ChatTree = {
         id: chatId,
@@ -869,7 +1170,15 @@ export function ArborApp() {
       }));
       setExpandedIds((current) => new Set([...current, nodeId]));
       setNewChatMode(false);
-      await streamIntoNode(chatId, nodeId, prompt, [{ role: "user", content: prompt }]);
+      if (helpResponse) return;
+      await streamIntoNode(
+        chatId,
+        nodeId,
+        prompt,
+        [{ role: "user", content: prompt }],
+        undefined,
+        fixtureId,
+      );
       return;
     }
 
@@ -877,6 +1186,8 @@ export function ArborApp() {
     const parent = activeChat.nodes[parentId];
     if (!parent) return;
     const nodeId = crypto.randomUUID();
+    // This runs only after a submit event; the timestamp is stored with the new branch.
+    // eslint-disable-next-line react-hooks/purity
     const now = Date.now();
     const anchor: QuoteAnchor | undefined = branchContext?.anchor
       ? { sourceNodeId: parentId, quote: branchContext.anchor }
@@ -885,10 +1196,10 @@ export function ArborApp() {
       id: nodeId,
       parentId,
       prompt,
-      response: "",
-      status: "streaming",
+      response: helpResponse ?? "",
+      status: helpResponse ? "complete" : "streaming",
       createdAt: now,
-      model: selectedInferenceLabel,
+      model: requestInferenceLabel,
       anchor,
     };
     const parentPath = getNodePath(activeChat, parentId);
@@ -925,18 +1236,22 @@ export function ArborApp() {
     }));
     setExpandedIds((current) => new Set([...current, parentId, nodeId]));
     setBranchContext(null);
-    await streamIntoNode(activeChat.id, nodeId, prompt, messages, anchor?.quote);
+    if (helpResponse) return;
+    await streamIntoNode(activeChat.id, nodeId, prompt, messages, anchor?.quote, fixtureId);
   }
 
   function resetWorkspace() {
-    if (!window.confirm("Reset Arbor to the seeded demo tree? Your local branches will be removed.")) return;
-    const seed = cloneSeedWorkspace();
-    window.localStorage.removeItem(STORAGE_KEY);
-    setWorkspace(seed);
-    setExpandedIds(new Set(["free-root", "free-acquisition", "free-activation"]));
+    if (!window.confirm("Start a fresh guest session? All chats and branches in this tab will be removed.")) {
+      return;
+    }
+    window.sessionStorage.removeItem(GUEST_WORKSPACE_STORAGE_KEY);
+    setWorkspace(createEmptyWorkspace());
+    setExpandedIds(new Set());
     setBranchContext(null);
     setComposerValue("");
-    setNewChatMode(false);
+    setPendingFixtureId(null);
+    setPendingHelp(false);
+    setNewChatMode(true);
     setOpenBranchMenuId(null);
   }
 
@@ -946,6 +1261,8 @@ export function ArborApp() {
     setSelection(null);
     setOpenBranchMenuId(null);
     setComposerValue("");
+    setPendingFixtureId(null);
+    setPendingHelp(false);
     window.setTimeout(() => composerRef.current?.focus(), 0);
   }
 
@@ -972,31 +1289,35 @@ export function ArborApp() {
         </div>
 
         <nav className="tree-nav" aria-label="Chats and branches">
-          <ul className="tree-root-list">
-            {workspace.chats.map((chat) => {
-              const root = chat.nodes[chat.rootNodeId];
-              if (!root) return null;
-              return (
-                <TreeNodeItem
-                  key={chat.id}
-                  chat={chat}
-                  node={root}
-                  depth={0}
-                  activeNodeId={workspace.activeChatId === chat.id ? workspace.activeNodeId : ""}
-                  expandedIds={expandedIds}
-                  onSelect={selectNode}
-                  onToggle={toggleNode}
-                />
-              );
-            })}
-          </ul>
+          {workspace.chats.length ? (
+            <ul className="tree-root-list">
+              {workspace.chats.map((chat) => {
+                const root = chat.nodes[chat.rootNodeId];
+                if (!root) return null;
+                return (
+                  <TreeNodeItem
+                    key={chat.id}
+                    chat={chat}
+                    node={root}
+                    depth={0}
+                    activeNodeId={workspace.activeChatId === chat.id ? workspace.activeNodeId : ""}
+                    expandedIds={expandedIds}
+                    onSelect={selectNode}
+                    onToggle={toggleNode}
+                  />
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="empty-chat-list">Your conversations will appear here.</p>
+          )}
         </nav>
 
         {IS_DEVELOPMENT && devMode ? (
           <div className="sidebar-footer">
             <span className="provider-dot" />
             <span>Development mode</span>
-            <span className="provider-name">Fixtures on</span>
+            <span className="provider-name">Tools on</span>
           </div>
         ) : null}
       </aside>
@@ -1048,10 +1369,15 @@ export function ArborApp() {
                 type="button"
                 className={`icon-button dev-mode-toggle ${devMode ? "is-active" : ""}`}
                 onClick={() => {
-                  setDevMode((enabled) => {
-                    if (!enabled) setModelControlsVisible(true);
-                    return !enabled;
-                  });
+                  const nextDevMode = !devMode;
+                  setDevMode(nextDevMode);
+                  if (nextDevMode) {
+                    setModelControlsVisible(true);
+                  } else {
+                    setPendingFixtureId(null);
+                    setPendingHelp(false);
+                    if (composerValue.trimStart().startsWith("/")) setComposerValue("");
+                  }
                 }}
                 aria-label={`${devMode ? "Disable" : "Enable"} development mode`}
                 aria-pressed={devMode}
@@ -1060,8 +1386,20 @@ export function ArborApp() {
                 <FlaskConical size={16} />
               </button>
             ) : null}
-            <button type="button" className="icon-button" onClick={resetWorkspace} aria-label="Reset demo">
+            <button type="button" className="icon-button" onClick={resetWorkspace} aria-label="Start fresh">
               <RotateCcw size={16} />
+            </button>
+            <span className="header-divider" aria-hidden="true" />
+            <span className="guest-badge" title="Chats are saved only for this tab">
+              <UserRound size={13} /> Guest
+            </span>
+            <button
+              type="button"
+              className="sign-in-button"
+              onClick={() => setSignInOpen(true)}
+              aria-haspopup="dialog"
+            >
+              <LogIn size={14} /> <span>Sign in</span>
             </button>
           </div>
         </header>
@@ -1174,15 +1512,19 @@ export function ArborApp() {
             {modelControlsVisible ? (
               <div className="inference-controls" aria-label="Model settings">
                 {IS_DEVELOPMENT && devMode ? (
-                  <span className="developer-controls-label" title="Mock formatting fixtures are enabled">
-                    Dev fixtures
+                  <span className="developer-controls-label" title="Developer fixtures and workspace generators are enabled">
+                    Dev tools
                   </span>
                 ) : null}
                 <label>
                   <span>Model</span>
                   <select
                     value={inferenceProvider}
-                    onChange={(event) => setInferenceProvider(event.target.value as InferenceProvider)}
+                    onChange={(event) => {
+                      const provider = event.target.value as InferenceProvider;
+                      setInferenceProvider(provider);
+                      if (provider !== "mock") setPendingFixtureId(null);
+                    }}
                     disabled={isGenerating}
                   >
                     <option value="groq">Groq API</option>
@@ -1215,12 +1557,90 @@ export function ArborApp() {
               </div>
             ) : null}
 
+            {IS_DEVELOPMENT && commandPaletteVisible ? (
+              <div
+                id="composer-command-list"
+                className="command-palette"
+                role="listbox"
+                aria-label="Composer commands"
+              >
+                <div className="command-palette-heading">
+                  <span>
+                    {composerValue.trimStart().toLowerCase().startsWith("/fixture")
+                      ? "Mock fixtures"
+                      : composerValue.trimStart().toLowerCase().startsWith("/demo")
+                        ? "Demo workspaces"
+                        : "Commands"}
+                  </span>
+                  <span>development only</span>
+                </div>
+                <div className="command-options">
+                  {commandOptions.length ? (
+                    commandOptions.map((option, index) => (
+                      <button
+                        type="button"
+                        id={`composer-command-${option.id}`}
+                        key={option.id}
+                        className={`command-option ${index === selectedCommandIndex ? "is-selected" : ""}`}
+                        role="option"
+                        aria-selected={index === selectedCommandIndex}
+                        onMouseEnter={() => setSelectedCommandIndex(index)}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => runComposerCommand(option)}
+                      >
+                        <code>{option.command}</code>
+                        <span className="command-option-copy">
+                          <strong>{option.label}</strong>
+                          <span>{option.description}</span>
+                        </span>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="command-empty">No matching command. Try /demo, /fixture, or /help.</div>
+                  )}
+                </div>
+                <div className="command-palette-footer">↑↓ select · Enter choose · Esc close</div>
+              </div>
+            ) : null}
+
             <div className="composer-input-row">
               <textarea
                 ref={composerRef}
                 value={composerValue}
-                onChange={(event) => setComposerValue(event.target.value)}
+                onChange={(event) => {
+                  setComposerValue(event.target.value);
+                  setSelectedCommandIndex(0);
+                  setCommandPaletteDismissed(false);
+                }}
                 onKeyDown={(event) => {
+                  if (commandPaletteVisible) {
+                    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                      event.preventDefault();
+                      if (commandOptions.length) {
+                        const direction = event.key === "ArrowDown" ? 1 : -1;
+                        setSelectedCommandIndex(
+                          (current) => (current + direction + commandOptions.length) % commandOptions.length,
+                        );
+                      }
+                      return;
+                    }
+
+                    if (event.key === "Enter" || event.key === "Tab") {
+                      const option = commandOptions[selectedCommandIndex] ?? commandOptions[0];
+                      if (option) {
+                        event.preventDefault();
+                        runComposerCommand(option);
+                      }
+                      return;
+                    }
+
+                    if (event.key === "Escape") {
+                      event.preventDefault();
+                      setCommandPaletteDismissed(true);
+                      return;
+                    }
+                  }
+
                   if (event.key === "Enter" && !event.shiftKey) {
                     event.preventDefault();
                     event.currentTarget.form?.requestSubmit();
@@ -1236,18 +1656,30 @@ export function ArborApp() {
                 rows={1}
                 disabled={isGenerating}
                 aria-label="Message Arbor"
+                aria-controls={commandPaletteVisible ? "composer-command-list" : undefined}
+                aria-activedescendant={
+                  commandPaletteVisible && commandOptions[selectedCommandIndex]
+                    ? `composer-command-${commandOptions[selectedCommandIndex].id}`
+                    : undefined
+                }
               />
               <button
                 type="submit"
                 className="send-button"
                 disabled={!composerValue.trim() || isGenerating}
-                aria-label="Send message"
+                aria-label={isCommandInput ? "Run command" : "Send message"}
               >
                 {isGenerating ? <LoaderCircle size={17} className="spin" /> : <ArrowUp size={17} />}
               </button>
             </div>
             <div className="composer-meta">
-              <span>{newChatMode ? "Creates a new tree" : "Enter to send · Shift + Enter for a new line"}</span>
+              <span>
+                {IS_DEVELOPMENT && devMode && !composerValue
+                  ? "Type / for developer commands"
+                  : newChatMode
+                    ? "Creates a new tree"
+                    : "Enter to send · Shift + Enter for a new line"}
+              </span>
               {!newChatMode && activeNode ? (
                 <button type="button" className="raw-branch-shortcut" onClick={() => beginBranch(activeNode.id)}>
                   <Plus size={12} /> Raw branch
@@ -1257,6 +1689,58 @@ export function ArborApp() {
           </form>
         </div>
       </section>
+
+      {signInOpen ? (
+        <div className="auth-backdrop" role="presentation" onMouseDown={() => setSignInOpen(false)}>
+          <section
+            className="auth-dialog"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="auth-dialog-title"
+            onMouseDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="icon-button auth-close"
+              onClick={() => setSignInOpen(false)}
+              aria-label="Close sign-in dialog"
+              autoFocus
+            >
+              <X size={17} />
+            </button>
+            <span className="auth-mark" aria-hidden="true">
+              <Leaf size={20} strokeWidth={2.2} />
+            </span>
+            <h2 id="auth-dialog-title">Keep every branch</h2>
+            <p className="auth-intro">
+              Sign in to save your conversation trees and continue exploring them from any device.
+            </p>
+            <div className="guest-session-card">
+              <span className="guest-session-icon" aria-hidden="true">
+                <UserRound size={16} />
+              </span>
+              <span>
+                <strong>You’re exploring as a guest</strong>
+                <small>This session is available only in this browser tab.</small>
+              </span>
+            </div>
+            <button type="button" className="auth-provider-button" disabled>
+              <span className="provider-letter" aria-hidden="true">G</span>
+              Continue with Google
+              <small>Coming soon</small>
+            </button>
+            <button type="button" className="auth-provider-button" disabled>
+              <span className="provider-letter provider-letter-email" aria-hidden="true">@</span>
+              Continue with email
+              <small>Coming soon</small>
+            </button>
+            <button type="button" className="continue-guest-button" onClick={() => setSignInOpen(false)}>
+              Continue as guest
+            </button>
+            <p className="auth-footnote">Closing this tab ends the guest session. No account is created.</p>
+          </section>
+        </div>
+      ) : null}
 
       {selection ? (
         <div
