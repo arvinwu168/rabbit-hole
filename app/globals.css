@@ -662,38 +662,137 @@ button:disabled {
   animation-delay: 240ms;
 }
 
-.anchored-branches {
+.branch-shelf {
   display: flex;
   flex-wrap: wrap;
+  align-items: flex-start;
   gap: 6px;
   margin-top: 15px;
 }
 
-.anchor-branch-chip {
+.branch-chip,
+.branch-more-button {
   min-width: 0;
   max-width: 250px;
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 5px 8px;
-  color: var(--forest);
-  background: var(--forest-faint);
-  border: 1px solid var(--forest-soft);
+  color: var(--ink-soft);
+  background: var(--paper-warm);
+  border: 1px solid var(--line);
   border-radius: 7px;
   cursor: pointer;
   font-size: 10.5px;
-  transition: border-color 120ms ease, background 120ms ease;
+  transition: color 120ms ease, border-color 120ms ease, background 120ms ease;
 }
 
-.anchor-branch-chip:hover {
+.branch-chip:hover,
+.branch-more-button:hover {
+  color: var(--forest);
   background: var(--forest-soft);
   border-color: color-mix(in srgb, var(--forest) 28%, var(--forest-soft));
 }
 
-.anchor-branch-chip span {
+.branch-chip.is-active {
+  color: var(--forest-strong);
+  background: var(--forest-soft);
+  border-color: color-mix(in srgb, var(--forest) 35%, var(--forest-soft));
+  box-shadow: inset 0 0 0 1px rgba(34, 100, 73, 0.05);
+}
+
+.branch-chip span {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.branch-overflow {
+  display: contents;
+}
+
+.branch-more-button svg {
+  transition: transform 120ms ease;
+}
+
+.branch-more-button svg.is-open {
+  transform: rotate(180deg);
+}
+
+.branch-overflow-menu {
+  width: min(100%, 430px);
+  max-height: 240px;
+  display: grid;
+  flex-basis: 100%;
+  gap: 2px;
+  margin-top: 2px;
+  padding: 5px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  box-shadow: var(--shadow-soft);
+  scrollbar-width: thin;
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.branch-menu-item {
+  min-width: 0;
+  width: 100%;
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 16px;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 8px;
+  color: var(--ink-soft);
+  text-align: left;
+  background: transparent;
+  border: 0;
+  border-radius: 7px;
+  cursor: pointer;
+}
+
+.branch-menu-item:hover,
+.branch-menu-item.is-active {
+  color: var(--forest-strong);
+  background: var(--forest-faint);
+}
+
+.branch-menu-icon {
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  color: var(--forest);
+  background: var(--forest-soft);
+  border-radius: 6px;
+}
+
+.branch-menu-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.branch-menu-label,
+.branch-menu-prompt {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.branch-menu-label {
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.branch-menu-prompt {
+  color: var(--ink-faint);
+  font-size: 10px;
+}
+
+.branch-menu-check {
+  color: var(--forest);
 }
 
 .message-actions {
@@ -722,12 +821,6 @@ button:disabled {
 .raw-branch-shortcut:hover {
   color: var(--forest);
   background: var(--forest-faint);
-}
-
-.branch-count {
-  margin-left: 4px;
-  color: var(--ink-faint);
-  font-size: 10px;
 }
 
 @media (hover: hover) and (pointer: fine) {

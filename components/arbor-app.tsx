@@ -234,6 +234,107 @@ function UserPrompt({ prompt }: { prompt: string }) {
   );
 }
 
+type BranchShelfProps = {
+  branches: TurnNode[];
+  activeBranchId?: string;
+  menuOpen: boolean;
+  onToggleMenu: () => void;
+  onSelect: (nodeId: string) => void;
+};
+
+function getBranchBaseLabel(branch: TurnNode): string {
+  return branch.anchor ? `“${branch.anchor.quote}”` : makeChatTitle(branch.prompt);
+}
+
+function getBranchLabel(branch: TurnNode, siblings: TurnNode[]): string {
+  const baseLabel = getBranchBaseLabel(branch);
+  const branchIndex = siblings.findIndex((sibling) => sibling.id === branch.id);
+  const duplicateIndex = siblings
+    .slice(0, branchIndex)
+    .filter((sibling) => getBranchBaseLabel(sibling) === baseLabel).length;
+
+  return duplicateIndex ? `${baseLabel} · ${duplicateIndex + 1}` : baseLabel;
+}
+
+function BranchShelf({
+  branches,
+  activeBranchId,
+  menuOpen,
+  onToggleMenu,
+  onSelect,
+}: BranchShelfProps) {
+  let visibleBranches = branches.length <= 3 ? branches : branches.slice(0, 3);
+
+  if (activeBranchId && !visibleBranches.some((branch) => branch.id === activeBranchId)) {
+    const activeBranch = branches.find((branch) => branch.id === activeBranchId);
+    if (activeBranch) {
+      visibleBranches = [...visibleBranches.slice(0, 2), activeBranch].sort(
+        (a, b) => branches.indexOf(a) - branches.indexOf(b),
+      );
+    }
+  }
+
+  return (
+    <div className="branch-shelf" aria-label="Branches from this response">
+      {visibleBranches.map((branch) => {
+        const isActive = branch.id === activeBranchId;
+        return (
+          <button
+            type="button"
+            key={branch.id}
+            className={`branch-chip ${isActive ? "is-active" : ""}`}
+            onClick={() => onSelect(branch.id)}
+            aria-current={isActive ? "page" : undefined}
+            title={branch.anchor ? `Anchored to “${branch.anchor.quote}”\n${branch.prompt}` : branch.prompt}
+          >
+            {branch.anchor ? <Quote size={11} /> : <GitBranch size={12} />}
+            <span>{getBranchLabel(branch, branches)}</span>
+          </button>
+        );
+      })}
+
+      {branches.length > 3 ? (
+        <div className="branch-overflow">
+          <button
+            type="button"
+            className="branch-more-button"
+            onClick={onToggleMenu}
+            aria-expanded={menuOpen}
+          >
+            More… <ChevronDown size={12} className={menuOpen ? "is-open" : ""} />
+          </button>
+
+          {menuOpen ? (
+            <div className="branch-overflow-menu">
+              {branches.map((branch) => {
+                const isActive = branch.id === activeBranchId;
+                return (
+                  <button
+                    type="button"
+                    key={branch.id}
+                    className={`branch-menu-item ${isActive ? "is-active" : ""}`}
+                    onClick={() => onSelect(branch.id)}
+                    aria-current={isActive ? "page" : undefined}
+                  >
+                    <span className="branch-menu-icon" aria-hidden="true">
+                      {branch.anchor ? <Quote size={12} /> : <GitBranch size={13} />}
+                    </span>
+                    <span className="branch-menu-copy">
+                      <span className="branch-menu-label">{getBranchLabel(branch, branches)}</span>
+                      {branch.anchor ? <span className="branch-menu-prompt">{branch.prompt}</span> : null}
+                    </span>
+                    {isActive ? <Check size={13} className="branch-menu-check" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ArborApp() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => cloneSeedWorkspace());
   const [hydrated, setHydrated] = useState(false);
@@ -246,6 +347,7 @@ export function ArborApp() {
   const [newChatMode, setNewChatMode] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
+  const [openBranchMenuId, setOpenBranchMenuId] = useState<string | null>(null);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -314,17 +416,21 @@ export function ArborApp() {
   }, [activeNode]);
 
   useEffect(() => {
-    const closeSelection = (event: PointerEvent) => {
+    const closeFloatingControls = (event: PointerEvent) => {
       const target = event.target as HTMLElement;
       if (!target.closest(".selection-popover")) setSelection(null);
+      if (!target.closest(".branch-overflow")) setOpenBranchMenuId(null);
     };
-    const clearOnScroll = () => setSelection(null);
+    const clearOnScroll = () => {
+      setSelection(null);
+      setOpenBranchMenuId(null);
+    };
     const scrollElement = scrollRef.current;
-    document.addEventListener("pointerdown", closeSelection);
+    document.addEventListener("pointerdown", closeFloatingControls);
     window.addEventListener("resize", clearOnScroll);
     scrollElement?.addEventListener("scroll", clearOnScroll);
     return () => {
-      document.removeEventListener("pointerdown", closeSelection);
+      document.removeEventListener("pointerdown", closeFloatingControls);
       window.removeEventListener("resize", clearOnScroll);
       scrollElement?.removeEventListener("scroll", clearOnScroll);
     };
@@ -390,6 +496,7 @@ export function ArborApp() {
     setNewChatMode(false);
     setBranchContext(null);
     setSelection(null);
+    setOpenBranchMenuId(null);
     if (chat) {
       setExpandedIds((current) => new Set([...current, ...getAncestorIds(chat, nodeId)]));
     }
@@ -407,6 +514,7 @@ export function ArborApp() {
   function beginBranch(parentId: string, anchor?: string) {
     setBranchContext({ parentId, anchor });
     setSelection(null);
+    setOpenBranchMenuId(null);
     window.getSelection()?.removeAllRanges();
     window.setTimeout(() => composerRef.current?.focus(), 0);
   }
@@ -526,12 +634,14 @@ export function ArborApp() {
     setBranchContext(null);
     setComposerValue("");
     setNewChatMode(false);
+    setOpenBranchMenuId(null);
   }
 
   function startNewChat() {
     setNewChatMode(true);
     setBranchContext(null);
     setSelection(null);
+    setOpenBranchMenuId(null);
     setComposerValue("");
     window.setTimeout(() => composerRef.current?.focus(), 0);
   }
@@ -635,7 +745,7 @@ export function ArborApp() {
             <div className="conversation-path">
               {activePath.map((node, index) => {
                 const children = activeChat ? getChildren(activeChat, node.id) : [];
-                const anchoredChildren = children.filter((child) => child.anchor);
+                const activeBranchId = activePath[index + 1]?.id;
                 return (
                   <article className="turn" key={node.id}>
                     {index > 0 ? (
@@ -679,20 +789,16 @@ export function ArborApp() {
                         )}
                       </div>
 
-                      {anchoredChildren.length ? (
-                        <div className="anchored-branches" aria-label="Branches anchored to this response">
-                          {anchoredChildren.map((child) => (
-                            <button
-                              type="button"
-                              key={child.id}
-                              className="anchor-branch-chip"
-                              onClick={() => selectNode(activeChat.id, child.id)}
-                            >
-                              <Quote size={11} />
-                              <span>“{child.anchor?.quote}”</span>
-                            </button>
-                          ))}
-                        </div>
+                      {children.length ? (
+                        <BranchShelf
+                          branches={children}
+                          activeBranchId={activeBranchId}
+                          menuOpen={openBranchMenuId === node.id}
+                          onToggleMenu={() =>
+                            setOpenBranchMenuId((current) => (current === node.id ? null : node.id))
+                          }
+                          onSelect={(childId) => selectNode(activeChat.id, childId)}
+                        />
                       ) : null}
 
                       {node.status !== "streaming" ? (
@@ -704,7 +810,6 @@ export function ArborApp() {
                             {copiedNodeId === node.id ? <Check size={14} /> : <Copy size={14} />}
                             {copiedNodeId === node.id ? "Copied" : "Copy"}
                           </button>
-                          {children.length ? <span className="branch-count">{children.length} branches</span> : null}
                         </div>
                       ) : null}
                     </div>
