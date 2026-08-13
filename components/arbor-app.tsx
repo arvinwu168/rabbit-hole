@@ -346,6 +346,7 @@ function ProviderIdentity({ model }: { model: string }) {
   }
 
   const providerKey = provider.toLowerCase();
+  const isArbor = providerKey === "arbor";
   const isMock = providerKey === "mock";
   const isGroq = providerKey === "groq";
   const isGrok = providerKey === "grok";
@@ -353,10 +354,18 @@ function ProviderIdentity({ model }: { model: string }) {
   return (
     <>
       <span
-        className={`response-provider-icon ${isMock ? "is-mock" : isGroq ? "is-groq" : isGrok ? "is-grok" : "is-generic"}`}
+        className={`response-provider-icon ${isArbor ? "is-arbor" : isMock ? "is-mock" : isGroq ? "is-groq" : isGrok ? "is-grok" : "is-generic"}`}
         aria-hidden="true"
       >
-        {isMock ? <FlaskConical size={13} /> : isGroq ? <Zap size={13} /> : <Sparkles size={13} />}
+        {isArbor ? (
+          <Leaf size={14} strokeWidth={2.2} />
+        ) : isMock ? (
+          <FlaskConical size={13} />
+        ) : isGroq ? (
+          <Zap size={13} />
+        ) : (
+          <Sparkles size={13} />
+        )}
       </span>
       <span className="response-provider-name">{provider}</span>
       {details ? <span className="model-name">{details}</span> : null}

@@ -634,6 +634,11 @@ button:disabled {
   background: #667168;
 }
 
+.response-provider-icon.is-arbor {
+  background: var(--forest);
+  box-shadow: 0 3px 10px rgba(34, 100, 73, 0.16);
+}
+
 .response-provider-icon.is-groq {
   background: #e85d3f;
 }
