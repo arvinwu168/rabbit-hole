@@ -29,7 +29,7 @@ Add a server-side key to `.env.local`:
 GROQ_API_KEY=gsk_your_key_here
 ```
 
-Restart the development server after changing the key. The development controls above the composer let you switch between the mock and Groq APIs and choose a maximum output of 128, 256, 512, or 1,024 tokens. Groq requests default to 256 output tokens, and the server enforces a hard 1,024-token ceiling.
+Restart the development server after changing the key. The development controls above the composer let you switch between the mock and Groq APIs and choose a maximum output of 128, 256, 512, or 1,024 tokens. Use the sliders button in the header to hide or restore all testing indicators while reviewing the clean product UI; the choice persists across reloads. Groq requests default to 256 output tokens, and the server enforces a hard 1,024-token ceiling.
 
 The Groq key is never sent to the browser. The `/api/chat` route calls Groq with native `fetch` and converts its event stream into the plain-text stream consumed by the UI.
 

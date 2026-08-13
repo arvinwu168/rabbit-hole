@@ -15,6 +15,7 @@ import {
   Plus,
   Quote,
   RotateCcw,
+  SlidersHorizontal,
   Sparkles,
   SquarePen,
   X,
@@ -34,6 +35,7 @@ import {
 } from "@/lib/arbor";
 
 const STORAGE_KEY = "arbor-workspace-v1";
+const DEVTOOLS_STORAGE_KEY = "arbor-devtools-visible";
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 
 type InferenceProvider = "mock" | "groq";
@@ -390,6 +392,7 @@ export function ArborApp() {
   const [openBranchMenuId, setOpenBranchMenuId] = useState<string | null>(null);
   const [inferenceProvider, setInferenceProvider] = useState<InferenceProvider>("groq");
   const [maxTokens, setMaxTokens] = useState(256);
+  const [devToolsVisible, setDevToolsVisible] = useState(true);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -410,6 +413,7 @@ export function ArborApp() {
 
   useEffect(() => {
     let restored: WorkspaceState | null = null;
+    let restoredDevToolsVisibility: boolean | null = null;
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -417,6 +421,10 @@ export function ArborApp() {
         if (parsed.chats?.length && parsed.activeChatId && parsed.activeNodeId) {
           restored = parsed;
         }
+      }
+      const savedDevToolsVisibility = window.localStorage.getItem(DEVTOOLS_STORAGE_KEY);
+      if (savedDevToolsVisibility !== null) {
+        restoredDevToolsVisibility = savedDevToolsVisibility === "true";
       }
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -427,6 +435,9 @@ export function ArborApp() {
         setWorkspace(restored);
         const chat = restored.chats.find((item) => item.id === restored?.activeChatId);
         if (chat) setExpandedIds(new Set(getAncestorIds(chat, restored.activeNodeId)));
+      }
+      if (restoredDevToolsVisibility !== null) {
+        setDevToolsVisible(restoredDevToolsVisibility);
       }
       setHydrated(true);
     });
@@ -441,6 +452,11 @@ export function ArborApp() {
     }, 120);
     return () => window.clearTimeout(timeout);
   }, [hydrated, workspace]);
+
+  useEffect(() => {
+    if (!hydrated || !IS_DEVELOPMENT) return;
+    window.localStorage.setItem(DEVTOOLS_STORAGE_KEY, String(devToolsVisible));
+  }, [devToolsVisible, hydrated]);
 
   useLayoutEffect(() => {
     const composer = composerRef.current;
@@ -741,11 +757,13 @@ export function ArborApp() {
           </ul>
         </nav>
 
-        <div className="sidebar-footer">
-          <span className="provider-dot" />
-          <span>{IS_DEVELOPMENT ? "Development" : "Inference"}</span>
-          <span className="provider-name">{selectedInference.label}</span>
-        </div>
+        {IS_DEVELOPMENT && devToolsVisible ? (
+          <div className="sidebar-footer">
+            <span className="provider-dot" />
+            <span>Development</span>
+            <span className="provider-name">{selectedInference.label}</span>
+          </div>
+        ) : null}
       </aside>
 
       <section className="main-panel">
@@ -775,9 +793,23 @@ export function ArborApp() {
             )}
           </div>
           <div className="main-header-actions">
-            <span className={`inference-badge is-${inferenceProvider}`}>
-              <Sparkles size={13} /> {selectedInference.label} · {selectedInference.modelLabel}
-            </span>
+            {IS_DEVELOPMENT && devToolsVisible ? (
+              <span className={`inference-badge is-${inferenceProvider}`}>
+                <Sparkles size={13} /> {selectedInference.label} · {selectedInference.modelLabel}
+              </span>
+            ) : null}
+            {IS_DEVELOPMENT ? (
+              <button
+                type="button"
+                className={`icon-button devtools-toggle ${devToolsVisible ? "is-active" : ""}`}
+                onClick={() => setDevToolsVisible((visible) => !visible)}
+                aria-label={`${devToolsVisible ? "Hide" : "Show"} development controls`}
+                aria-pressed={devToolsVisible}
+                title={`${devToolsVisible ? "Hide" : "Show"} development controls`}
+              >
+                <SlidersHorizontal size={16} />
+              </button>
+            ) : null}
             <button type="button" className="icon-button" onClick={resetWorkspace} aria-label="Reset demo">
               <RotateCcw size={16} />
             </button>
@@ -889,7 +921,7 @@ export function ArborApp() {
               </div>
             ) : null}
 
-            {IS_DEVELOPMENT ? (
+            {IS_DEVELOPMENT && devToolsVisible ? (
               <div className="developer-controls" aria-label="Development inference settings">
                 <span className="developer-controls-label">Dev</span>
                 <label>

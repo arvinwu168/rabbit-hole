@@ -422,6 +422,11 @@ button:disabled {
   border-color: var(--line);
 }
 
+.devtools-toggle.is-active {
+  color: var(--forest);
+  background: var(--forest-faint);
+}
+
 .conversation-scroll {
   min-height: 0;
   overflow-x: hidden;
