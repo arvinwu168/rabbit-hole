@@ -403,7 +403,7 @@ button:disabled {
   gap: 5px;
 }
 
-.mock-badge {
+.inference-badge {
   display: inline-flex;
   align-items: center;
   gap: 5px;
@@ -414,6 +414,12 @@ button:disabled {
   border-radius: 999px;
   font-size: 10.5px;
   font-weight: 600;
+}
+
+.inference-badge.is-mock {
+  color: var(--ink-soft);
+  background: var(--paper-warm);
+  border-color: var(--line);
 }
 
 .conversation-scroll {
@@ -961,6 +967,69 @@ button:disabled {
   background: var(--forest-soft);
 }
 
+.developer-controls {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  padding: 6px 8px;
+  color: var(--ink-faint);
+  background: var(--paper-warm);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  font-size: 10px;
+}
+
+.developer-controls-label {
+  padding: 3px 5px;
+  color: var(--forest);
+  background: var(--forest-soft);
+  border-radius: 5px;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.developer-controls label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.developer-controls select {
+  height: 26px;
+  padding: 0 24px 0 7px;
+  color: var(--ink-soft);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  outline: 0;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.developer-controls select:focus {
+  border-color: color-mix(in srgb, var(--forest) 50%, var(--line));
+}
+
+.developer-controls select:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
+.developer-model {
+  min-width: 0;
+  margin-right: auto;
+  overflow: hidden;
+  color: var(--ink-soft);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .composer-input-row {
   display: flex;
   align-items: flex-end;
@@ -1119,7 +1188,7 @@ button:disabled {
     min-width: min(84vw, 288px);
   }
 
-  .mock-badge {
+  .inference-badge {
     display: none;
   }
 

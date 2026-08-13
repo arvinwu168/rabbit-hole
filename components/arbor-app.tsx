@@ -34,6 +34,46 @@ import {
 } from "@/lib/arbor";
 
 const STORAGE_KEY = "arbor-workspace-v1";
+const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
+
+type InferenceProvider = "mock" | "groq";
+
+const INFERENCE_OPTIONS: Record<
+  InferenceProvider,
+  { label: string; model: string; modelLabel: string }
+> = {
+  groq: {
+    label: "Groq API",
+    model: "openai/gpt-oss-120b",
+    modelLabel: "GPT-OSS 120B",
+  },
+  mock: {
+    label: "Mock API",
+    model: "simulated",
+    modelLabel: "Simulated",
+  },
+};
+
+const MAX_TOKEN_OPTIONS = [128, 256, 512, 1024] as const;
+
+function inferenceLabel(provider: InferenceProvider, maxTokens?: number): string {
+  const option = INFERENCE_OPTIONS[provider];
+  const tokenLabel = provider === "groq" && maxTokens ? ` · max ${maxTokens}` : "";
+  return `${option.label.replace(" API", "")} · ${option.modelLabel}${tokenLabel}`;
+}
+
+function responseInferenceLabel(headers: Headers, fallback: string): string {
+  const provider = headers.get("X-Arbor-Provider");
+  const model = headers.get("X-Arbor-Model");
+  const maxTokens = headers.get("X-Arbor-Max-Tokens");
+
+  if (!provider || !model) return fallback;
+
+  const modelLabel =
+    model === "openai/gpt-oss-120b" ? "GPT-OSS 120B" : model === "simulated" ? "Simulated" : model;
+  const tokenLabel = provider === "Groq" && maxTokens ? ` · max ${maxTokens}` : "";
+  return `${provider} · ${modelLabel}${tokenLabel}`;
+}
 
 type BranchContext = {
   parentId: string;
@@ -348,6 +388,8 @@ export function ArborApp() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
   const [openBranchMenuId, setOpenBranchMenuId] = useState<string | null>(null);
+  const [inferenceProvider, setInferenceProvider] = useState<InferenceProvider>("groq");
+  const [maxTokens, setMaxTokens] = useState(256);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -363,6 +405,8 @@ export function ArborApp() {
   const isGenerating = workspace.chats.some((chat) =>
     Object.values(chat.nodes).some((node) => node.status === "streaming"),
   );
+  const selectedInference = INFERENCE_OPTIONS[inferenceProvider];
+  const selectedInferenceLabel = inferenceLabel(inferenceProvider, maxTokens);
 
   useEffect(() => {
     let restored: WorkspaceState | null = null;
@@ -465,10 +509,17 @@ export function ArborApp() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, messages, anchor }),
+        body: JSON.stringify({ prompt, messages, anchor, provider: inferenceProvider, maxTokens }),
       });
 
-      if (!response.ok || !response.body) throw new Error("Unable to start generation");
+      if (!response.ok || !response.body) {
+        const detail = await response.text();
+        throw new Error(detail || "Unable to start generation");
+      }
+
+      updateNode(chatId, nodeId, {
+        model: responseInferenceLabel(response.headers, selectedInferenceLabel),
+      });
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -482,10 +533,11 @@ export function ArborApp() {
       }
 
       updateNode(chatId, nodeId, { status: "complete", response: content });
-    } catch {
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown inference error";
       updateNode(chatId, nodeId, {
         status: "error",
-        response: "The simulated response was interrupted. Start another branch to keep exploring.",
+        response: `Generation was interrupted: ${detail.slice(0, 320)}`,
       });
     }
   }
@@ -561,7 +613,7 @@ export function ArborApp() {
         response: "",
         status: "streaming",
         createdAt: now,
-        model: "Simulated",
+        model: selectedInferenceLabel,
       };
       const chat: ChatTree = {
         id: chatId,
@@ -597,7 +649,7 @@ export function ArborApp() {
       response: "",
       status: "streaming",
       createdAt: now,
-      model: "Simulated",
+      model: selectedInferenceLabel,
       anchor,
     };
     const parentPath = getNodePath(activeChat, parentId);
@@ -691,8 +743,8 @@ export function ArborApp() {
 
         <div className="sidebar-footer">
           <span className="provider-dot" />
-          <span>Local prototype</span>
-          <span className="provider-name">Mock AI</span>
+          <span>{IS_DEVELOPMENT ? "Development" : "Inference"}</span>
+          <span className="provider-name">{selectedInference.label}</span>
         </div>
       </aside>
 
@@ -723,8 +775,8 @@ export function ArborApp() {
             )}
           </div>
           <div className="main-header-actions">
-            <span className="mock-badge">
-              <Sparkles size={13} /> Simulated
+            <span className={`inference-badge is-${inferenceProvider}`}>
+              <Sparkles size={13} /> {selectedInference.label} · {selectedInference.modelLabel}
             </span>
             <button type="button" className="icon-button" onClick={resetWorkspace} aria-label="Reset demo">
               <RotateCcw size={16} />
@@ -834,6 +886,40 @@ export function ArborApp() {
                 <button type="button" onClick={() => setBranchContext(null)} aria-label="Cancel branch context">
                   <X size={14} />
                 </button>
+              </div>
+            ) : null}
+
+            {IS_DEVELOPMENT ? (
+              <div className="developer-controls" aria-label="Development inference settings">
+                <span className="developer-controls-label">Dev</span>
+                <label>
+                  <span>Inference</span>
+                  <select
+                    value={inferenceProvider}
+                    onChange={(event) => setInferenceProvider(event.target.value as InferenceProvider)}
+                    disabled={isGenerating}
+                  >
+                    <option value="groq">Groq API</option>
+                    <option value="mock">Mock API</option>
+                  </select>
+                </label>
+                <span className="developer-model" title={selectedInference.model}>
+                  {selectedInference.modelLabel}
+                </span>
+                <label>
+                  <span>Max output</span>
+                  <select
+                    value={maxTokens}
+                    onChange={(event) => setMaxTokens(Number(event.target.value))}
+                    disabled={isGenerating}
+                  >
+                    {MAX_TOKEN_OPTIONS.map((tokenCount) => (
+                      <option key={tokenCount} value={tokenCount}>
+                        {tokenCount} tokens
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
             ) : null}
 

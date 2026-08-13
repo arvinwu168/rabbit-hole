@@ -21,6 +21,18 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Test with Groq
+
+Add a server-side key to `.env.local`:
+
+```bash
+GROQ_API_KEY=gsk_your_key_here
+```
+
+Restart the development server after changing the key. The development controls above the composer let you switch between the mock and Groq APIs and choose a maximum output of 128, 256, 512, or 1,024 tokens. Groq requests default to 256 output tokens, and the server enforces a hard 1,024-token ceiling.
+
+The Groq key is never sent to the browser. The `/api/chat` route calls Groq with native `fetch` and converts its event stream into the plain-text stream consumed by the UI.
+
 ## Production check
 
 ```bash
@@ -28,4 +40,4 @@ npm run lint
 npm run build
 ```
 
-The current `/api/chat` route is intentionally mocked. It is the seam where an OpenAI provider or Vercel AI Gateway can be connected later without changing the tree interaction model.
+The `/api/chat` route supports both a local mock and Groq's OpenAI-compatible API without changing the tree interaction model.
