@@ -515,6 +515,31 @@ button:disabled {
   text-underline-offset: 2px;
 }
 
+.user-message-actions {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: -4px;
+  margin-right: 3px;
+}
+
+.user-message-actions button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 7px;
+  color: var(--ink-faint);
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 10.5px;
+}
+
+.user-message-actions button:hover {
+  color: var(--forest);
+  background: var(--forest-faint);
+}
+
 .assistant-message {
   margin-top: 25px;
 }
@@ -703,6 +728,25 @@ button:disabled {
   margin-left: 4px;
   color: var(--ink-faint);
   font-size: 10px;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .user-message-actions button,
+  .message-actions button {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-2px);
+    transition: opacity 120ms ease, transform 120ms ease;
+  }
+
+  .user-message:hover .user-message-actions button,
+  .user-message:focus-within .user-message-actions button,
+  .assistant-message:hover .message-actions button,
+  .assistant-message:focus-within .message-actions button {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
 }
 
 .new-chat-state {

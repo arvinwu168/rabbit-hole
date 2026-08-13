@@ -47,6 +47,24 @@ type TextSelection = {
   top: number;
 };
 
+async function writeToClipboard(text: string): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const fallback = document.createElement("textarea");
+    fallback.value = text;
+    fallback.setAttribute("readonly", "");
+    fallback.style.position = "fixed";
+    fallback.style.opacity = "0";
+    document.body.appendChild(fallback);
+    fallback.select();
+    const copied = document.execCommand("copy");
+    fallback.remove();
+    return copied;
+  }
+}
+
 type TreeNodeProps = {
   chat: ChatTree;
   node: TurnNode;
@@ -158,6 +176,7 @@ function StatusMark({ status }: { status: TurnNode["status"] }) {
 function UserPrompt({ prompt }: { prompt: string }) {
   const [expanded, setExpanded] = useState(false);
   const [canCollapse, setCanCollapse] = useState(false);
+  const [copied, setCopied] = useState(false);
   const viewportRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
@@ -176,25 +195,42 @@ function UserPrompt({ prompt }: { prompt: string }) {
     return () => observer.disconnect();
   }, [prompt]);
 
+  async function copyPrompt() {
+    if (await writeToClipboard(prompt)) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1200);
+    } else {
+      setCopied(false);
+    }
+  }
+
   return (
-    <div className="user-bubble">
-      <div
-        ref={viewportRef}
-        className={`user-prompt-viewport ${canCollapse && !expanded ? "is-collapsed" : ""}`}
-      >
-        {prompt}
-      </div>
-      {canCollapse ? (
-        <button
-          type="button"
-          className="user-prompt-toggle"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
+    <>
+      <div className="user-bubble">
+        <div
+          ref={viewportRef}
+          className={`user-prompt-viewport ${canCollapse && !expanded ? "is-collapsed" : ""}`}
         >
-          {expanded ? "Show less" : "Show more"}
+          {prompt}
+        </div>
+        {canCollapse ? (
+          <button
+            type="button"
+            className="user-prompt-toggle"
+            aria-expanded={expanded}
+            onClick={() => setExpanded((value) => !value)}
+          >
+            {expanded ? "Show less" : "Show more"}
+          </button>
+        ) : null}
+      </div>
+      <div className="user-message-actions">
+        <button type="button" onClick={copyPrompt} aria-label="Copy user prompt">
+          {copied ? <Check size={14} /> : <Copy size={14} />}
+          {copied ? "Copied" : "Copy"}
         </button>
-      ) : null}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -392,11 +428,10 @@ export function ArborApp() {
   }
 
   async function copyResponse(node: TurnNode) {
-    try {
-      await navigator.clipboard.writeText(node.response);
+    if (await writeToClipboard(node.response)) {
       setCopiedNodeId(node.id);
       window.setTimeout(() => setCopiedNodeId(null), 1200);
-    } catch {
+    } else {
       setCopiedNodeId(null);
     }
   }
