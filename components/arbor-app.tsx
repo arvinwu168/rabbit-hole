@@ -794,7 +794,7 @@ export function ArborApp() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
   const [openBranchMenuId, setOpenBranchMenuId] = useState<string | null>(null);
-  const [inferenceProvider, setInferenceProvider] = useState<InferenceProvider>("groq");
+  const [inferenceProvider, setInferenceProvider] = useState<InferenceProvider>("chatgpt-relay");
   const [maxTokens, setMaxTokens] = useState<TokenLimit>("automatic");
   const [modelControlsVisible, setModelControlsVisible] = useState(true);
   const [devMode, setDevMode] = useState(false);
@@ -811,12 +811,17 @@ export function ArborApp() {
   const [signInOpen, setSignInOpen] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const followStreamRef = useRef(true);
+  const lastViewedNodeIdRef = useRef<string | null>(null);
 
   const activeChat = useMemo(
     () => workspace.chats.find((chat) => chat.id === workspace.activeChatId) ?? workspace.chats[0],
     [workspace],
   );
   const activeNode = activeChat?.nodes[workspace.activeNodeId] ?? activeChat?.nodes[activeChat?.rootNodeId];
+  const branchParent = branchContext && activeChat ? activeChat.nodes[branchContext.parentId] : null;
+  const composerParent = branchParent ?? activeNode;
+  const composerBlockedByGeneration = !newChatMode && composerParent?.status === "streaming";
   const activePath = useMemo(
     () => (activeChat && activeNode ? getNodePath(activeChat, activeNode.id) : []),
     [activeChat, activeNode],
@@ -874,21 +879,15 @@ export function ArborApp() {
         ready?: boolean;
         loginRequired?: boolean;
         rateLimited?: boolean;
-        retryAfterMs?: number;
-        cooldownReason?: "chatgpt" | "traffic-guard";
-        promptBudgetRemaining?: number;
       };
       setRelayToken(token);
       setRelayPaired(true);
       window.sessionStorage.setItem(RELAY_TOKEN_STORAGE_KEY, token);
 
       if (health.rateLimited) {
-        const minutes = Math.max(1, Math.ceil((health.retryAfterMs ?? 0) / 60_000));
         setRelayStatus("rate-limited");
         setRelayMessage(
-          health.cooldownReason === "traffic-guard"
-            ? `Arbor's safety guard is pacing requests. Try again in about ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`
-            : `ChatGPT temporarily limited this account. Arbor paused relay prompts for about ${minutes} ${minutes === 1 ? "minute" : "minutes"}.`,
+          "ChatGPT is showing a temporary usage warning. Arbor will allow prompts again as soon as that warning clears.",
         );
         return false;
       }
@@ -1050,9 +1049,19 @@ export function ArborApp() {
   }, [composerValue]);
 
   useEffect(() => {
-    if (!activeNode) return;
+    const scrollElement = scrollRef.current;
+    if (!activeNode || !scrollElement) return;
+
+    const nodeChanged = lastViewedNodeIdRef.current !== activeNode.id;
+    if (nodeChanged) {
+      lastViewedNodeIdRef.current = activeNode.id;
+      followStreamRef.current = true;
+    } else if (activeNode.status !== "streaming" || !followStreamRef.current) {
+      return;
+    }
+
     const frame = window.requestAnimationFrame(() => {
-      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
+      scrollElement.scrollTo({ top: scrollElement.scrollHeight, behavior: "auto" });
     });
     return () => window.cancelAnimationFrame(frame);
   }, [activeNode]);
@@ -1063,18 +1072,22 @@ export function ArborApp() {
       if (!target.closest(".selection-popover")) setSelection(null);
       if (!target.closest(".branch-overflow")) setOpenBranchMenuId(null);
     };
-    const clearOnScroll = () => {
+    const handleScroll = () => {
       setSelection(null);
       setOpenBranchMenuId(null);
+      if (!scrollElement) return;
+      const distanceFromBottom =
+        scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
+      followStreamRef.current = distanceFromBottom <= 80;
     };
     const scrollElement = scrollRef.current;
     document.addEventListener("pointerdown", closeFloatingControls);
-    window.addEventListener("resize", clearOnScroll);
-    scrollElement?.addEventListener("scroll", clearOnScroll);
+    window.addEventListener("resize", handleScroll);
+    scrollElement?.addEventListener("scroll", handleScroll);
     return () => {
       document.removeEventListener("pointerdown", closeFloatingControls);
-      window.removeEventListener("resize", clearOnScroll);
-      scrollElement?.removeEventListener("scroll", clearOnScroll);
+      window.removeEventListener("resize", handleScroll);
+      scrollElement?.removeEventListener("scroll", handleScroll);
     };
   }, []);
 
@@ -1177,13 +1190,20 @@ export function ArborApp() {
           for (const line of lines) {
             if (!line.trim()) continue;
             const event = JSON.parse(line) as {
-              type?: "snapshot" | "done" | "error";
+              type?: "meta" | "snapshot" | "done" | "error";
               text?: string;
               error?: string;
+              model?: string;
               conversationUrl?: string;
+              promptSubmitted?: boolean;
             };
 
-            if (event.type === "error") throw new Error(event.error || "The ChatGPT relay failed.");
+            if (event.type === "meta" && event.model) {
+              updateNode(chatId, nodeId, { model: `ChatGPT · ${event.model}` });
+            }
+            if (event.type === "error") {
+              throw new Error(event.error || "The ChatGPT relay failed.");
+            }
             if ((event.type === "snapshot" || event.type === "done") && typeof event.text === "string") {
               content = event.text;
               updateNode(chatId, nodeId, {
@@ -1216,7 +1236,7 @@ export function ArborApp() {
       const detail = error instanceof Error ? error.message : "Unknown inference error";
       if (
         inferenceProvider === "chatgpt-relay"
-        && /temporarily limited this account|relay safety guard blocked/i.test(detail)
+        && /temporarily limiting this account/i.test(detail)
       ) {
         setRelayStatus("rate-limited");
         setRelayMessage(detail);
@@ -1344,7 +1364,7 @@ export function ArborApp() {
   async function submitPrompt(event: FormEvent) {
     event.preventDefault();
     const prompt = composerValue.trim();
-    if (!prompt || isGenerating) return;
+    if (!prompt || composerBlockedByGeneration) return;
 
     if (isCommandInput && !pendingFixtureId && !pendingHelp) {
       const selectedOption = commandOptions[selectedCommandIndex] ?? commandOptions[0];
@@ -1488,8 +1508,6 @@ export function ArborApp() {
     setPendingHelp(false);
     window.setTimeout(() => composerRef.current?.focus(), 0);
   }
-
-  const branchParent = branchContext && activeChat ? activeChat.nodes[branchContext.parentId] : null;
 
   return (
     <main className={`app-shell ${sidebarOpen ? "" : "sidebar-collapsed"}`}>
@@ -1667,7 +1685,7 @@ export function ArborApp() {
                     <div className="assistant-message">
                       <div className="assistant-head">
                         <ProviderIdentity model={node.model} />
-                        {node.providerConversationUrl ? (
+                        {node.status === "complete" && node.providerConversationUrl ? (
                           <a
                             className="response-source-link"
                             href={node.providerConversationUrl}
@@ -1970,7 +1988,7 @@ export function ArborApp() {
                       : "Continue this path, or select response text to branch…"
                 }
                 rows={1}
-                disabled={isGenerating}
+                disabled={composerBlockedByGeneration}
                 aria-label="Message Arbor"
                 aria-controls={commandPaletteVisible ? "composer-command-list" : undefined}
                 aria-activedescendant={
@@ -1984,12 +2002,12 @@ export function ArborApp() {
                 className="send-button"
                 disabled={
                   !composerValue.trim()
-                  || isGenerating
+                  || composerBlockedByGeneration
                   || (inferenceProvider === "chatgpt-relay" && relayStatus !== "ready")
                 }
                 aria-label={isCommandInput ? "Run command" : "Send message"}
               >
-                {isGenerating ? <LoaderCircle size={17} className="spin" /> : <ArrowUp size={17} />}
+                {composerBlockedByGeneration ? <LoaderCircle size={17} className="spin" /> : <ArrowUp size={17} />}
               </button>
             </div>
             <div className="composer-meta">
@@ -2000,7 +2018,7 @@ export function ArborApp() {
                     ? "Creates a new tree"
                     : "Enter to send · Shift + Enter for a new line"}
               </span>
-              {!newChatMode && activeNode ? (
+              {!newChatMode && activeNode && activeNode.status !== "streaming" ? (
                 <button type="button" className="raw-branch-shortcut" onClick={() => beginBranch(activeNode.id)}>
                   <Plus size={12} /> Raw branch
                 </button>

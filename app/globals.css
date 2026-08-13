@@ -800,6 +800,10 @@ button:disabled {
   scrollbar-color: #627269 transparent;
 }
 
+.markdown-body pre:has(> code:empty) {
+  display: none;
+}
+
 .markdown-body pre code {
   padding: 0;
   color: inherit;

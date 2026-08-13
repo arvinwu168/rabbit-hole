@@ -40,15 +40,19 @@ Now start the relay:
 npm run relay
 ```
 
+On macOS, the relay opens its dedicated Chrome window behind the terminal so the pairing token stays visible and easy to copy. `relay:login` still brings Chrome forward because that step requires interaction.
+
 Then:
 
 1. Copy the pairing token printed by the relay.
 2. In Arbor, open the model controls and select **ChatGPT Relay**.
 3. Paste the token and choose **Connect**.
 
-Every Arbor node starts a fresh ChatGPT conversation containing only its root-to-current branch transcript. That keeps sibling branches isolated. The relay selects ChatGPT **Instant** for lower response latency and uses ChatGPT's in-page new-chat navigation when possible instead of fully reloading the site. Completed relay responses include an **Open in ChatGPT** link so you can inspect the underlying conversation.
+Every Arbor node starts a fresh ChatGPT conversation containing only its root-to-current branch transcript. That keeps roots and sibling branches isolated. Each user-initiated request gets a temporary background tab that is closed after Arbor captures the response. The relay selects ChatGPT **Instant** for lower response latency. Completed relay responses include an **Open in ChatGPT** link so you can inspect the underlying conversation.
 
-The relay has conservative local traffic guards: one generation at a time, at least 15 seconds between prompt starts, and at most 20 prompts in a rolling hour. Health checks and response polling inspect the local browser DOM; they do not submit ChatGPT prompts. If ChatGPT shows its temporary “requests too quickly” protection message, the relay stops sending prompts for at least ten minutes and Arbor shows a cooldown state. Wait for the cooldown instead of repeatedly reconnecting or resubmitting; ChatGPT may keep the limit active longer than Arbor's local timer.
+The relay submits exactly one prompt for each explicit Arbor send, runs at most three generations concurrently, queues additional sends locally, and never retries prompts automatically. It does not impose an arbitrary per-minute or hourly quota. Health checks and response polling inspect the local browser DOM; they do not submit ChatGPT prompts. If ChatGPT itself shows a temporary usage warning, Arbor blocks new sends only while that warning remains visible. Restarting the relay reuses an already-running dedicated browser on its local debugging port instead of opening another Chrome window.
+
+Relay diagnostics are written as JSON lines to `.arbor/chatgpt-relay.log`. Follow them while reproducing a problem with `tail -f .arbor/chatgpt-relay.log`. Each send gets a request ID and stage timings; prompt text, pairing tokens, cookies, and page contents are intentionally omitted. Override the path with `ARBOR_RELAY_LOG=/path/to/log npm run relay` when needed.
 
 These controls reduce accidental load but cannot guarantee account safety. The relay automates ChatGPT's public web interface rather than an officially supported integration API. Use it only as a private, single-user prototype; use the OpenAI API or another documented integration before distributing Arbor.
 
