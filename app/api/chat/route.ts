@@ -19,6 +19,63 @@ const DEFAULT_MAX_TOKENS = 256;
 const MIN_MAX_TOKENS = 32;
 const MAX_MAX_TOKENS = 1024;
 
+const STORAGE_FORMAT_DEMO = [
+  "# 3.5-inch hard-disk drives: a quick walk-through",
+  "",
+  "The 3.5-inch form factor is the workhorse of desktops, servers, NAS boxes, and external enclosures. Within that single size, drives trade off **capacity**, **speed**, **reliability**, power use, and cost.",
+  "",
+  "## 1. Interface: how the drive talks to the host",
+  "",
+  "| Interface | Typical connector | Max transfer rate* | Main use case | Compatibility notes |",
+  "| --- | --- | ---: | --- | --- |",
+  "| SATA I | 7-pin data + 15-pin power | 150 MB/s | Legacy desktops | Modern SATA ports remain backward compatible. |",
+  "| SATA II | Same SATA connectors | 300 MB/s | Older desktops and enclosures | Works with SATA I and SATA III hosts. |",
+  "| SATA III | Same SATA connectors | 600 MB/s | Current HDDs and many SSDs | The interface is faster than a mechanical disk's sustained throughput. |",
+  "| SAS-3 | 29-pin combined connector | 1,200 MB/s | Enterprise servers | Requires a SAS controller; SATA controllers cannot drive SAS disks. |",
+  "",
+  "*The figures above are theoretical interface ceilings, not guaranteed disk throughput.*",
+  "",
+  "> **Practical rule:** for a modern desktop or NAS, SATA III is the default. Choose SAS only when the surrounding server infrastructure supports it.",
+  "",
+  "## 2. A simple selection flow",
+  "",
+  "```mermaid",
+  "flowchart LR",
+  "  A[Choose a workload] --> B{Always-on NAS?}",
+  "  B -- Yes --> C[NAS-rated CMR drive]",
+  "  B -- No --> D{Enterprise server?}",
+  "  D -- Yes --> E[Enterprise SATA or SAS]",
+  "  D -- No --> F[Desktop SATA drive]",
+  "```",
+  "",
+  "## 3. Inspecting a drive in code",
+  "",
+  "Use a typed record when normalizing inventory data:",
+  "",
+  "```ts",
+  "type Drive = {",
+  "  model: string;",
+  "  capacityTB: number;",
+  "  rpm: 5400 | 7200;",
+  "  recording: 'CMR' | 'SMR';",
+  "};",
+  "",
+  "const suitableForNas = (drive: Drive) =>",
+  "  drive.recording === 'CMR' && drive.capacityTB >= 8;",
+  "```",
+  "",
+  "Inline values such as `7200 RPM`, `CMR`, and `SATA III` should remain visually distinct.",
+  "",
+  "## Buying checklist",
+  "",
+  "- [x] Confirm the interface and available bay size",
+  "- [ ] Check whether the drive uses CMR or SMR recording",
+  "- [ ] Compare workload rating and warranty",
+  "- [ ] Verify noise and power requirements",
+  "",
+  "For most NAS purchases, recording technology and workload rating matter more than peak interface speed.",
+].join("\n");
+
 function normalizeMaxTokens(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_MAX_TOKENS;
   return Math.min(MAX_MAX_TOKENS, Math.max(MIN_MAX_TOKENS, Math.floor(value)));
@@ -36,6 +93,10 @@ function inferenceHeaders(provider: string, model: string, maxTokens: number): H
 
 function responseFor(prompt: string, anchor?: string): string {
   const normalized = prompt.toLowerCase();
+
+  if (/3[.\s-]?5.?inch|hard.?disk|hard drive|hdd|storage format|markdown demo/.test(normalized)) {
+    return STORAGE_FORMAT_DEMO;
+  }
 
   if (/metric|measure|signal|success/.test(normalized)) {
     return "Start with the earliest behavior that proves value moved from one person to another. A useful metric should be **specific, observable, and close to the product’s core job**.\n\nI would track: completion of the core workflow, an invitation or share, and a meaningful action by the recipient. The last event is the strongest signal because it shows the product is creating a loop rather than collecting passive sign-ups.";

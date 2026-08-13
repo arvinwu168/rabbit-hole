@@ -20,8 +20,18 @@ import {
   SquarePen,
   X,
 } from "lucide-react";
-import { FormEvent, MouseEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
+import {
+  FormEvent,
+  MouseEvent,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import ReactMarkdown, { type Components } from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   ChatTree,
   QuoteAnchor,
@@ -105,6 +115,117 @@ async function writeToClipboard(text: string): Promise<boolean> {
     fallback.remove();
     return copied;
   }
+}
+
+const MARKDOWN_COMPONENTS: Components = {
+  table: ({ node, ...props }) => {
+    void node;
+    return (
+      <div className="markdown-table-scroll">
+        <table {...props} />
+      </div>
+    );
+  },
+  a: ({ node, ...props }) => {
+    void node;
+    return <a {...props} target="_blank" rel="noreferrer" />;
+  },
+};
+
+function MermaidDiagram({ chart }: { chart: string }) {
+  const reactId = useId();
+  const diagramId = `arbor-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const [svg, setSvg] = useState("");
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function renderDiagram() {
+      setSvg("");
+      setError(false);
+
+      try {
+        const { default: mermaid } = await import("mermaid");
+        mermaid.initialize({
+          startOnLoad: false,
+          securityLevel: "strict",
+          theme: "base",
+          themeVariables: {
+            primaryColor: "#edf5f0",
+            primaryTextColor: "#20241f",
+            primaryBorderColor: "#226449",
+            lineColor: "#5f675e",
+            secondaryColor: "#f5f6f1",
+            tertiaryColor: "#ffffff",
+            fontFamily: "Inter, ui-sans-serif, sans-serif",
+          },
+        });
+        const result = await mermaid.render(diagramId, chart);
+        if (!cancelled) setSvg(result.svg);
+      } catch {
+        if (!cancelled) setError(true);
+      }
+    }
+
+    void renderDiagram();
+    return () => {
+      cancelled = true;
+    };
+  }, [chart, diagramId]);
+
+  if (error) {
+    return (
+      <div className="mermaid-error">
+        <span>Diagram could not be rendered. Showing its source instead.</span>
+        <pre>
+          <code>{chart}</code>
+        </pre>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mermaid-diagram" aria-label="Diagram">
+      {svg ? (
+        <div className="mermaid-svg" dangerouslySetInnerHTML={{ __html: svg }} />
+      ) : (
+        <span className="mermaid-loading">
+          <LoaderCircle size={14} className="spin" /> Rendering diagram…
+        </span>
+      )}
+    </div>
+  );
+}
+
+function MarkdownResponse({ content }: { content: string }) {
+  const parts: Array<{ type: "markdown" | "mermaid"; content: string }> = [];
+  const mermaidFence = /```mermaid[ \t]*\n([\s\S]*?)```/gi;
+  let cursor = 0;
+
+  for (const match of content.matchAll(mermaidFence)) {
+    const index = match.index ?? 0;
+    if (index > cursor) parts.push({ type: "markdown", content: content.slice(cursor, index) });
+    parts.push({ type: "mermaid", content: match[1].trim() });
+    cursor = index + match[0].length;
+  }
+
+  if (cursor < content.length) parts.push({ type: "markdown", content: content.slice(cursor) });
+  if (!parts.length) parts.push({ type: "markdown", content });
+
+  return parts.map((part, index) =>
+    part.type === "mermaid" ? (
+      <MermaidDiagram key={`mermaid-${index}`} chart={part.content} />
+    ) : (
+      <ReactMarkdown
+        key={`markdown-${index}`}
+        remarkPlugins={[remarkGfm]}
+        components={MARKDOWN_COMPONENTS}
+      >
+        {part.content}
+      </ReactMarkdown>
+    ),
+  );
 }
 
 type TreeNodeProps = {
@@ -863,7 +984,7 @@ export function ArborApp() {
                         onMouseUp={(event) => handleTextSelection(node.id, event)}
                       >
                         {node.response ? (
-                          <ReactMarkdown>{node.response}</ReactMarkdown>
+                          <MarkdownResponse content={node.response} />
                         ) : (
                           <span className="thinking-placeholder">
                             <span />
