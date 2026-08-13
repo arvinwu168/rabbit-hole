@@ -1,4 +1,4 @@
-import type { ChatTree, TurnNode } from "@/lib/arbor";
+import type { ChatTree, TurnNode } from "@/lib/conversation-tree";
 
 type DemoFollowUp = {
   prompt: string;

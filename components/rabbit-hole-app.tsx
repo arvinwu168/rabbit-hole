@@ -10,15 +10,16 @@ import {
   ExternalLink,
   FlaskConical,
   GitBranch,
-  Leaf,
   LoaderCircle,
   LogIn,
   MessageSquare,
+  Moon,
   PanelLeftClose,
   PanelLeftOpen,
   PlugZap,
   Plus,
   Quote,
+  Rabbit,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
@@ -26,6 +27,7 @@ import {
   Sparkles,
   Square,
   SquarePen,
+  Sun,
   Terminal,
   UserRound,
   X,
@@ -47,6 +49,7 @@ import {
   ChatTree,
   QuoteAnchor,
   RelayLatencyMetrics,
+  RelayTrafficMetrics,
   TurnNode,
   WorkspaceState,
   buildContinuationMessages,
@@ -55,7 +58,7 @@ import {
   getChildren,
   getNodePath,
   makeChatTitle,
-} from "@/lib/arbor";
+} from "@/lib/conversation-tree";
 import { createRandomDemoChats } from "@/lib/demo-trees";
 import {
   MOCK_FIXTURES,
@@ -75,17 +78,24 @@ import {
   type OutputTokenLimit,
   type OutputTokenSetting,
 } from "@/lib/inference-options";
+import {
+  THEME_CHANGE_EVENT,
+  THEME_STORAGE_KEY,
+  oppositeColorTheme,
+  resolveColorTheme,
+  type ColorTheme,
+} from "@/lib/theme";
 
-const LEGACY_WORKSPACE_STORAGE_KEY = "arbor-workspace-v1";
-const GUEST_WORKSPACE_STORAGE_KEY = "arbor-guest-workspace-v1";
+const LEGACY_WORKSPACE_STORAGE_KEY = "rabbit-hole-workspace-v1";
+const GUEST_WORKSPACE_STORAGE_KEY = "rabbit-hole-guest-workspace-v1";
 const LEGACY_DEMO_CHAT_IDS = new Set([
   "chat-free-tier",
   "chat-onboarding",
   "chat-conference",
 ]);
-const MODEL_CONTROLS_STORAGE_KEY = "arbor-model-controls-visible";
-const DEV_MODE_STORAGE_KEY = "arbor-dev-mode";
-const RELAY_TOKEN_STORAGE_KEY = "arbor-chatgpt-relay-token";
+const MODEL_CONTROLS_STORAGE_KEY = "rabbit-hole-model-controls-visible";
+const DEV_MODE_STORAGE_KEY = "rabbit-hole-dev-mode";
+const RELAY_TOKEN_STORAGE_KEY = "rabbit-hole-chatgpt-relay-token";
 const CHATGPT_RELAY_URL = "http://127.0.0.1:43119";
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 
@@ -97,6 +107,24 @@ type RelayStatus =
   | "login-required"
   | "offline"
   | "unauthorized";
+
+type RelaySessionDiagnostics = {
+  uptimeMs: number;
+  requestsReceived: number;
+  duplicateRequests: number;
+  submissions: number;
+  completed: number;
+  failed: number;
+  protectionWarnings: number;
+  cooldownStarts: number;
+  pagesOpened: number;
+  pagesClosed: number;
+  activePages: number;
+  peakPages: number;
+  prewarmEnabled: boolean;
+  maxConcurrentGenerations: number;
+  traffic: RelayTrafficMetrics;
+};
 
 type ComposerCommandOption = {
   id: string;
@@ -249,10 +277,10 @@ function inferenceLabel(
 }
 
 function responseInferenceLabel(headers: Headers, fallback: string): string {
-  const provider = headers.get("X-Arbor-Provider");
-  const model = headers.get("X-Arbor-Model");
-  const maxTokens = headers.get("X-Arbor-Max-Tokens");
-  const fixture = headers.get("X-Arbor-Fixture");
+  const provider = headers.get("X-Rabbit-Hole-Provider");
+  const model = headers.get("X-Rabbit-Hole-Model");
+  const maxTokens = headers.get("X-Rabbit-Hole-Max-Tokens");
+  const fixture = headers.get("X-Rabbit-Hole-Fixture");
 
   if (!provider || !model) return fallback;
 
@@ -382,7 +410,7 @@ function ProviderIdentity({ model }: { model: string }) {
   }
 
   const providerKey = provider.toLowerCase();
-  const isArbor = providerKey === "arbor";
+  const isRabbitHole = providerKey === "rabbit hole";
   const isMock = providerKey === "mock";
   const isGateway = providerKey === "ai gateway";
   const isGroq = providerKey === "groq" || providerKey === "groq direct";
@@ -392,11 +420,11 @@ function ProviderIdentity({ model }: { model: string }) {
   return (
     <>
       <span
-        className={`response-provider-icon ${isArbor ? "is-arbor" : isMock ? "is-mock" : isGateway ? "is-gateway" : isGroq ? "is-groq" : isGrok ? "is-grok" : isChatGpt ? "is-chatgpt" : "is-generic"}`}
+        className={`response-provider-icon ${isRabbitHole ? "is-rabbit-hole" : isMock ? "is-mock" : isGateway ? "is-gateway" : isGroq ? "is-groq" : isGrok ? "is-grok" : isChatGpt ? "is-chatgpt" : "is-generic"}`}
         aria-hidden="true"
       >
-        {isArbor ? (
-          <Leaf size={14} strokeWidth={2.2} />
+        {isRabbitHole ? (
+          <Rabbit size={14} strokeWidth={2.1} />
         ) : isMock ? (
           <FlaskConical size={13} />
         ) : isGroq ? (
@@ -421,7 +449,7 @@ function formatLatency(milliseconds: number): string {
 
 function LatencySummary({ metrics }: { metrics: RelayLatencyMetrics }) {
   const endToEndMs = metrics.endToEndMs ?? metrics.relayTotalMs;
-  const arborClientMs = metrics.arborClientMs
+  const clientUiMs = metrics.clientUiMs
     ?? Math.max(0, endToEndMs - metrics.relayTotalMs);
   const details = [
     `Queue: ${formatLatency(metrics.queueMs)}`,
@@ -430,7 +458,15 @@ function LatencySummary({ metrics }: { metrics: RelayLatencyMetrics }) {
     `ChatGPT first text: ${formatLatency(metrics.chatgptTimeToFirstTextMs)}`,
     `ChatGPT generation/capture: ${formatLatency(metrics.chatgptGenerationMs)}`,
     `Capture stability window: ${formatLatency(metrics.stabilityWindowMs)}`,
-    `Arbor UI/network: ${formatLatency(arborClientMs)}`,
+    `Rabbit Hole UI/network: ${formatLatency(clientUiMs)}`,
+    ...(metrics.traffic
+      ? [
+          `Browser requests: ${metrics.traffic.requests}`,
+          `ChatGPT API requests: ${metrics.traffic.chatgptApiRequests}`,
+          `Document loads: ${metrics.traffic.documentLoads}`,
+          `403 / 429 / 5xx: ${metrics.traffic.status403} / ${metrics.traffic.status429} / ${metrics.traffic.status5xx}`,
+        ]
+      : []),
   ].join(" · ");
 
   return (
@@ -439,17 +475,76 @@ function LatencySummary({ metrics }: { metrics: RelayLatencyMetrics }) {
       <span>E2E {formatLatency(endToEndMs)}</span>
       <span>ChatGPT {formatLatency(metrics.chatgptObservedMs)}</span>
       <span>Relay setup {formatLatency(metrics.relayOverheadMs)}</span>
+      {metrics.traffic ? <span>Net {metrics.traffic.requests}</span> : null}
     </span>
+  );
+}
+
+function RelayTraceDetails({ metrics }: { metrics: RelayLatencyMetrics }) {
+  if (!metrics.trace && !metrics.traffic) return null;
+  const trace = metrics.trace;
+  const traffic = metrics.traffic;
+
+  return (
+    <details className="relay-trace-details">
+      <summary>
+        <Terminal size={11} />
+        Relay trace {trace?.requestId ?? "unavailable"}
+      </summary>
+      <div className="relay-trace-grid">
+        <span>Relay request</span><code>{trace?.requestId ?? "—"}</code>
+        <span>Client request</span><code>{trace?.clientRequestId ?? "—"}</code>
+        <span>Browser page</span><code>{trace?.pageId ?? "—"} · {trace?.pageRole ?? "—"}</code>
+        <span>Request kind</span><code>{trace?.requestKind ?? "—"}</code>
+        <span>Network</span>
+        <code>
+          {traffic
+            ? `${traffic.requests} requests · ${traffic.chatgptApiRequests} ChatGPT API · ${traffic.documentLoads} documents`
+            : "—"}
+        </code>
+        <span>HTTP alerts</span>
+        <code>
+          {traffic
+            ? `${traffic.status403}×403 · ${traffic.status429}×429 · ${traffic.status5xx}×5xx · ${traffic.failed} failed`
+            : "—"}
+        </code>
+      </div>
+      {traffic?.topRoutes.length ? (
+        <div className="relay-trace-routes">
+          <span>Sanitized ChatGPT routes</span>
+          {traffic.topRoutes.map((route) => (
+            <code key={route.route}>{route.count}× {route.route}</code>
+          ))}
+        </div>
+      ) : null}
+    </details>
   );
 }
 
 function MermaidDiagram({ chart }: { chart: string }) {
   const reactId = useId();
-  const diagramId = `arbor-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
+  const diagramId = `rabbit-hole-mermaid-${reactId.replace(/[^a-zA-Z0-9_-]/g, "")}`;
   const [svg, setSvg] = useState("");
   const [error, setError] = useState(false);
+  const [prefersDark, setPrefersDark] = useState<boolean | null>(null);
 
   useEffect(() => {
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const updateColorScheme = () => {
+      const selectedTheme = document.documentElement.dataset.theme;
+      setPrefersDark(resolveColorTheme(selectedTheme, colorScheme.matches) === "dark");
+    };
+    updateColorScheme();
+    colorScheme.addEventListener("change", updateColorScheme);
+    window.addEventListener(THEME_CHANGE_EVENT, updateColorScheme);
+    return () => {
+      colorScheme.removeEventListener("change", updateColorScheme);
+      window.removeEventListener(THEME_CHANGE_EVENT, updateColorScheme);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (prefersDark === null) return;
     let cancelled = false;
 
     async function renderDiagram() {
@@ -463,12 +558,13 @@ function MermaidDiagram({ chart }: { chart: string }) {
           securityLevel: "strict",
           theme: "base",
           themeVariables: {
-            primaryColor: "#edf5f0",
-            primaryTextColor: "#20241f",
-            primaryBorderColor: "#226449",
-            lineColor: "#5f675e",
-            secondaryColor: "#f5f6f1",
-            tertiaryColor: "#ffffff",
+            primaryColor: prefersDark ? "#242628" : "#f0f1f1",
+            primaryTextColor: prefersDark ? "#e7e8e9" : "#26282a",
+            primaryBorderColor: prefersDark ? "#9ca1a5" : "#62666a",
+            lineColor: prefersDark ? "#9ca1a5" : "#62666a",
+            secondaryColor: prefersDark ? "#202224" : "#f1f1ef",
+            tertiaryColor: prefersDark ? "#1b1d1f" : "#fdfdfc",
+            background: prefersDark ? "#1e2022" : "#fbfbfa",
             fontFamily: "Inter, ui-sans-serif, sans-serif",
           },
         });
@@ -483,7 +579,7 @@ function MermaidDiagram({ chart }: { chart: string }) {
     return () => {
       cancelled = true;
     };
-  }, [chart, diagramId]);
+  }, [chart, diagramId, prefersDark]);
 
   if (error) {
     return (
@@ -818,7 +914,7 @@ function BranchShelf({
   );
 }
 
-export function ArborApp() {
+export function RabbitHoleApp() {
   const [workspace, setWorkspace] = useState<WorkspaceState>(() => createEmptyWorkspace());
   const [hydrated, setHydrated] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(() => new Set());
@@ -838,6 +934,7 @@ export function ArborApp() {
   const [relayToken, setRelayToken] = useState("");
   const [relayPaired, setRelayPaired] = useState(false);
   const [relayStatus, setRelayStatus] = useState<RelayStatus>("disconnected");
+  const [relaySession, setRelaySession] = useState<RelaySessionDiagnostics | null>(null);
   const [relayMessage, setRelayMessage] = useState(
     "First time: run npm run relay:login, sign in, close Chrome, then run npm run relay.",
   );
@@ -846,6 +943,7 @@ export function ArborApp() {
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [commandPaletteDismissed, setCommandPaletteDismissed] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
+  const [colorTheme, setColorTheme] = useState<ColorTheme>("light");
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const followStreamRef = useRef(true);
@@ -919,7 +1017,9 @@ export function ArborApp() {
         loginRequired?: boolean;
         rateLimited?: boolean;
         retryAt?: string | null;
+        session?: RelaySessionDiagnostics;
       };
+      setRelaySession(health.session ?? null);
       setRelayToken(token);
       setRelayPaired(true);
       window.sessionStorage.setItem(RELAY_TOKEN_STORAGE_KEY, token);
@@ -931,8 +1031,8 @@ export function ArborApp() {
         setRelayStatus("rate-limited");
         setRelayMessage(
           retryTime
-            ? `Arbor paused new ChatGPT launches until about ${retryTime}; queued prompts will not be submitted.`
-            : "Arbor paused new ChatGPT launches after a temporary usage warning.",
+            ? `Rabbit Hole paused new ChatGPT launches until about ${retryTime}; queued prompts will not be submitted.`
+            : "Rabbit Hole paused new ChatGPT launches after a temporary usage warning.",
         );
         return false;
       }
@@ -960,6 +1060,28 @@ export function ArborApp() {
   }, [relayToken]);
 
   useEffect(() => {
+    const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
+    const syncColorTheme = () => {
+      let savedTheme: string | null = null;
+      try {
+        savedTheme = window.localStorage.getItem(THEME_STORAGE_KEY);
+      } catch {}
+
+      const nextTheme = resolveColorTheme(savedTheme, colorScheme.matches);
+      if (savedTheme === "light" || savedTheme === "dark") {
+        document.documentElement.dataset.theme = savedTheme;
+      } else {
+        document.documentElement.removeAttribute("data-theme");
+      }
+      setColorTheme(nextTheme);
+    };
+
+    syncColorTheme();
+    colorScheme.addEventListener("change", syncColorTheme);
+    return () => colorScheme.removeEventListener("change", syncColorTheme);
+  }, []);
+
+  useEffect(() => {
     const pendingCommand = pendingHelp
       ? "/help"
       : pendingFixture
@@ -972,6 +1094,16 @@ export function ArborApp() {
     });
     return () => window.cancelAnimationFrame(frame);
   }, [composerValue, pendingFixture, pendingHelp]);
+
+  function toggleColorTheme() {
+    const nextTheme = oppositeColorTheme(colorTheme);
+    document.documentElement.dataset.theme = nextTheme;
+    try {
+      window.localStorage.setItem(THEME_STORAGE_KEY, nextTheme);
+    } catch {}
+    setColorTheme(nextTheme);
+    window.dispatchEvent(new Event(THEME_CHANGE_EVENT));
+  }
 
   useEffect(() => {
     let restored: WorkspaceState | null = null;
@@ -1227,6 +1359,11 @@ export function ArborApp() {
     generationControllersRef.current.set(nodeId, controller);
     try {
       const usingRelay = selectedInference.transport === "relay";
+      const relayRequestKind = messages.length === 1
+        ? "root"
+        : anchor
+          ? "quote-branch"
+          : "branch";
       if (usingRelay && relayStatus !== "ready") {
         throw new Error("Connect the local ChatGPT relay before sending a message.");
       }
@@ -1239,7 +1376,16 @@ export function ArborApp() {
         },
         body: JSON.stringify(
           usingRelay
-            ? { messages }
+            ? {
+                messages,
+                client: {
+                  clientRequestId: nodeId,
+                  chatId,
+                  nodeId,
+                  requestKind: relayRequestKind,
+                  clientStartedAt: requestStartedAt,
+                },
+              }
             : {
                 prompt,
                 messages,
@@ -1265,7 +1411,7 @@ export function ArborApp() {
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let content = "";
-      const streamProtocol = response.headers.get("X-Arbor-Stream-Protocol");
+      const streamProtocol = response.headers.get("X-Rabbit-Hole-Stream-Protocol");
 
       if (usingRelay) {
         let buffer = "";
@@ -1308,8 +1454,8 @@ export function ArborApp() {
                       latency: {
                         ...event.metrics,
                         endToEndMs,
-                        arborOverheadMs: Math.max(0, endToEndMs - event.metrics.chatgptObservedMs),
-                        arborClientMs: Math.max(0, endToEndMs - event.metrics.relayTotalMs),
+                        clientOverheadMs: Math.max(0, endToEndMs - event.metrics.chatgptObservedMs),
+                        clientUiMs: Math.max(0, endToEndMs - event.metrics.relayTotalMs),
                       },
                     }
                   : {}),
@@ -1328,7 +1474,7 @@ export function ArborApp() {
         return;
       }
 
-      if (streamProtocol === "arbor-ndjson-v1") {
+      if (streamProtocol === "rabbit-hole-ndjson-v1") {
         let buffer = "";
 
         while (true) {
@@ -1444,6 +1590,7 @@ export function ArborApp() {
     setRelayToken("");
     setRelayPaired(false);
     setRelayStatus("disconnected");
+    setRelaySession(null);
     setRelayMessage("First time: run npm run relay:login, sign in, close Chrome, then run npm run relay.");
   }
 
@@ -1528,7 +1675,7 @@ export function ArborApp() {
     const fixtureId = pendingFixtureId ?? undefined;
     const helpResponse = pendingHelp ? developerHelpResponse() : undefined;
     const requestInferenceLabel = helpResponse
-      ? "Arbor · Help"
+      ? "Rabbit Hole · Help"
       : fixtureId
         ? `Mock · ${getMockFixtureSelection(fixtureId)?.label ?? fixtureId}`
         : selectedInferenceLabel;
@@ -1656,9 +1803,9 @@ export function ArborApp() {
         <div className="sidebar-topbar">
           <div className="brand-lockup">
             <span className="brand-mark" aria-hidden="true">
-              <Leaf size={16} strokeWidth={2.2} />
+              <Rabbit size={17} strokeWidth={2.1} />
             </span>
-            <span>Arbor</span>
+            <span>Rabbit Hole</span>
           </div>
           <button type="button" className="icon-button" onClick={startNewChat} aria-label="New chat">
             <SquarePen size={17} />
@@ -1778,6 +1925,15 @@ export function ArborApp() {
             <button type="button" className="icon-button" onClick={resetWorkspace} aria-label="Start fresh">
               <RotateCcw size={16} />
             </button>
+            <button
+              type="button"
+              className="icon-button theme-toggle"
+              onClick={toggleColorTheme}
+              aria-label={`Switch to ${colorTheme === "dark" ? "light" : "dark"} mode`}
+              title={`Switch to ${colorTheme === "dark" ? "light" : "dark"} mode`}
+            >
+              {colorTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
+            </button>
             <span className="header-divider" aria-hidden="true" />
             <span className="guest-badge" title="Chats are saved only for this tab">
               <UserRound size={13} /> Guest
@@ -1797,10 +1953,10 @@ export function ArborApp() {
           {newChatMode ? (
             <section className="new-chat-state">
               <span className="new-chat-mark" aria-hidden="true">
-                <GitBranch size={22} />
+                <Rabbit size={23} strokeWidth={1.9} />
               </span>
-              <h1>Where should this thought begin?</h1>
-              <p>Start with a question. Every answer can become several paths without losing where it came from.</p>
+              <h1>Which rabbit hole should we follow?</h1>
+              <p>Start with a question. Follow any answer deeper, or branch sideways without losing the path behind you.</p>
             </section>
           ) : (
             <div className="conversation-path">
@@ -1853,6 +2009,10 @@ export function ArborApp() {
                           </button>
                         ) : null}
                       </div>
+
+                      {IS_DEVELOPMENT && devMode && node.latency ? (
+                        <RelayTraceDetails metrics={node.latency} />
+                      ) : null}
 
                       <div
                         className={`markdown-body ${node.status === "streaming" ? "is-streaming" : ""}`}
@@ -2031,6 +2191,20 @@ export function ArborApp() {
                   ) : null}
                 </div>
 
+                {IS_DEVELOPMENT && devMode && relaySession ? (
+                  <div className="relay-session-metrics" aria-label="Relay session diagnostics">
+                    <span>{relaySession.submissions} submitted</span>
+                    <span>{relaySession.requestsReceived} received</span>
+                    <span>{relaySession.duplicateRequests} duplicates blocked</span>
+                    <span>{relaySession.pagesOpened} pages</span>
+                    <span>{relaySession.traffic.requests} browser requests</span>
+                    <span>{relaySession.traffic.chatgptApiRequests} ChatGPT API</span>
+                    <span>{relaySession.protectionWarnings} protection warnings</span>
+                    <span>{relaySession.prewarmEnabled ? "prewarm on" : "prewarm off"}</span>
+                    <span>concurrency {relaySession.maxConcurrentGenerations}</span>
+                  </div>
+                ) : null}
+
                 {relayStatus !== "ready" && relayStatus !== "rate-limited" ? (
                   <div className="relay-connect-row">
                     <label className="relay-token-field">
@@ -2057,7 +2231,7 @@ export function ArborApp() {
                     >
                       Connect
                     </button>
-                    <span className="relay-command" title="Run these from the Arbor project directory">
+                    <span className="relay-command" title="Run these from the Rabbit Hole project directory">
                       <Terminal size={12} /> <code>relay:login → relay</code>
                     </span>
                   </div>
@@ -2163,7 +2337,7 @@ export function ArborApp() {
                 }
                 rows={1}
                 disabled={composerBlockedByGeneration}
-                aria-label="Message Arbor"
+                aria-label="Message Rabbit Hole"
                 aria-controls={commandPaletteVisible ? "composer-command-list" : undefined}
                 aria-activedescendant={
                   commandPaletteVisible && commandOptions[selectedCommandIndex]
@@ -2232,11 +2406,11 @@ export function ArborApp() {
               <X size={17} />
             </button>
             <span className="auth-mark" aria-hidden="true">
-              <Leaf size={20} strokeWidth={2.2} />
+              <Rabbit size={21} strokeWidth={2.1} />
             </span>
-            <h2 id="auth-dialog-title">Keep every branch</h2>
+            <h2 id="auth-dialog-title">Keep every rabbit hole</h2>
             <p className="auth-intro">
-              Sign in to save your conversation trees and continue exploring them from any device.
+              Sign in to save every trail and continue exploring from any device.
             </p>
             <div className="guest-session-card">
               <span className="guest-session-icon" aria-hidden="true">

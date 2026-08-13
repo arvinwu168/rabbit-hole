@@ -5,6 +5,32 @@ export type QuoteAnchor = {
   quote: string;
 };
 
+export type RelayTrafficMetrics = {
+  observedMs: number;
+  requests: number;
+  responses: number;
+  failed: number;
+  documentLoads: number;
+  chatgptApiRequests: number;
+  firstPartyRequests: number;
+  status403: number;
+  status429: number;
+  status5xx: number;
+  methods: Record<string, number>;
+  resourceTypes: Record<string, number>;
+  owners: Record<string, number>;
+  statusClasses: Record<string, number>;
+  topRoutes: Array<{ route: string; count: number }>;
+};
+
+export type RelayTraceMetrics = {
+  requestId: string;
+  clientRequestId: string | null;
+  pageId: string | null;
+  pageRole: string;
+  requestKind: string;
+};
+
 export type RelayLatencyMetrics = {
   queueMs: number;
   browserSetupMs: number;
@@ -16,8 +42,10 @@ export type RelayLatencyMetrics = {
   stabilityWindowMs: number;
   prewarmHit?: boolean;
   endToEndMs?: number;
-  arborOverheadMs?: number;
-  arborClientMs?: number;
+  clientOverheadMs?: number;
+  clientUiMs?: number;
+  traffic?: RelayTrafficMetrics;
+  trace?: RelayTraceMetrics;
 };
 
 export type TurnNode = {

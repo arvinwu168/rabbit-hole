@@ -1,5 +1,5 @@
 {
-  "name": "arbor",
+  "name": "rabbit-hole",
   "version": "0.1.0",
   "private": true,
   "scripts": {
@@ -9,10 +9,11 @@
     "lint": "eslint .",
     "relay": "node scripts/chatgpt-relay.mjs",
     "relay:login": "node scripts/chatgpt-relay.mjs --login",
-    "test": "npm run test:arbor && npm run test:inference && npm run test:relay",
-    "test:arbor": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/arbor.test.mjs",
+    "relay:report": "node scripts/relay-report.mjs",
+    "test": "npm run test:rabbit-hole && npm run test:inference && npm run test:relay",
+    "test:rabbit-hole": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/rabbit-hole.test.mjs",
     "test:inference": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/inference-options.test.mjs",
-    "test:relay": "node --test scripts/chatgpt-relay.test.mjs"
+    "test:relay": "node --test scripts/chatgpt-relay.test.mjs scripts/relay-observability.test.mjs"
   },
   "dependencies": {
     "@ai-sdk/gateway": "^4.0.52",

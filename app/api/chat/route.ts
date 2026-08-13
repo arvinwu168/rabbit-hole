@@ -111,14 +111,14 @@ function inferenceHeaders(
   const headers: Record<string, string> = {
     "Content-Type": "text/plain; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
-    "X-Arbor-Provider": provider,
-    "X-Arbor-Model": model,
+    "X-Rabbit-Hole-Provider": provider,
+    "X-Rabbit-Hole-Model": model,
   };
 
   if (outputTokenSetting !== undefined) {
-    headers["X-Arbor-Max-Tokens"] = String(outputTokenSetting);
+    headers["X-Rabbit-Hole-Max-Tokens"] = String(outputTokenSetting);
   }
-  if (fixtureId) headers["X-Arbor-Fixture"] = fixtureId;
+  if (fixtureId) headers["X-Rabbit-Hole-Fixture"] = fixtureId;
   return headers;
 }
 
@@ -381,7 +381,7 @@ async function v0Response(
     body: JSON.stringify({
       message: v0PromptForRequest(body),
       system: [
-        "You are responding inside Arbor, a tree-structured conversation interface.",
+        "You are responding inside Rabbit Hole, a tree-structured conversation interface.",
         "Answer in plain Markdown and be concise by default.",
         "Do not create, edit, or deploy files. Do not invoke integrations or external tools.",
       ].join(" "),
@@ -394,7 +394,7 @@ async function v0Response(
       responseMode: "sync",
       mcpServerIds: [],
       metadata: {
-        source: "arbor",
+        source: "rabbit-hole",
       },
     }),
     cache: "no-store",
@@ -439,7 +439,7 @@ function gatewayResponse(
 
   const gatewayOptions = {
     sort: "cost",
-    tags: ["arbor", inferenceOptionId],
+    tags: ["rabbit-hole", inferenceOptionId],
   } satisfies GatewayProviderOptions;
   const result = streamText({
     model: gateway(modelId),
@@ -452,7 +452,7 @@ function gatewayResponse(
     },
     onError: ({ error }) => {
       const message = error instanceof Error ? error.message : "Unknown AI Gateway stream error";
-      console.error(`[Arbor AI Gateway] ${message}`);
+      console.error(`[Rabbit Hole AI Gateway] ${message}`);
     },
   });
 
@@ -460,7 +460,7 @@ function gatewayResponse(
     headers: {
       ...inferenceHeaders("AI Gateway", modelId, maxTokens ?? "automatic"),
       "Content-Type": "application/x-ndjson; charset=utf-8",
-      "X-Arbor-Stream-Protocol": "arbor-ndjson-v1",
+      "X-Rabbit-Hole-Stream-Protocol": "rabbit-hole-ndjson-v1",
     },
   });
 }

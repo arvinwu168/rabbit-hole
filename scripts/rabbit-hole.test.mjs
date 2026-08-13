@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildContinuationMessages } from "../lib/arbor.ts";
+import { buildContinuationMessages } from "../lib/conversation-tree.ts";
+import {
+  isColorTheme,
+  oppositeColorTheme,
+  resolveColorTheme,
+} from "../lib/theme.ts";
 
 function turn(overrides = {}) {
   return {
@@ -53,4 +58,20 @@ test("provider error text is UI state and is not replayed as assistant context",
       { role: "user", content: "Retry." },
     ],
   );
+});
+
+test("color theme follows the system until the user saves an override", () => {
+  assert.equal(resolveColorTheme(null, false), "light");
+  assert.equal(resolveColorTheme(null, true), "dark");
+  assert.equal(resolveColorTheme("light", true), "light");
+  assert.equal(resolveColorTheme("dark", false), "dark");
+  assert.equal(resolveColorTheme("unknown", true), "dark");
+});
+
+test("color theme validation and toggling remain binary", () => {
+  assert.equal(isColorTheme("light"), true);
+  assert.equal(isColorTheme("dark"), true);
+  assert.equal(isColorTheme("system"), false);
+  assert.equal(oppositeColorTheme("light"), "dark");
+  assert.equal(oppositeColorTheme("dark"), "light");
 });
