@@ -762,6 +762,21 @@ export function publicRelayError(error) {
   return withoutTerminalFormatting.slice(0, 320);
 }
 
+export async function stopActiveChatGptGeneration(page) {
+  if (!page || page.isClosed()) return false;
+
+  const stopButton = page
+    .locator('button[data-testid="stop-button"], button[aria-label*="Stop"]')
+    .first();
+  const visible = await stopButton.isVisible().catch(() => false);
+  if (!visible) return false;
+
+  return stopButton
+    .click({ timeout: 1_500 })
+    .then(() => true)
+    .catch(() => false);
+}
+
 class ChatGptBrowser {
   constructor({ executablePath, profileDirectory, debugPort, headless, timeoutMs }) {
     this.executablePath = executablePath;
@@ -1213,6 +1228,10 @@ class ChatGptBrowser {
       wrapped.promptSubmitted = promptSubmitted;
       throw wrapped;
     } finally {
+      if (signal.aborted && promptSubmitted) {
+        const stopClicked = await stopActiveChatGptGeneration(page);
+        relayLog("generation.cancelled", { requestId, promptSubmitted, stopClicked });
+      }
       await page?.close().catch(() => {});
       if (launchAcquired) this.launchGate.release();
       if (acquired) this.generationGate.release();
@@ -1302,6 +1321,9 @@ async function main() {
 
       const abortController = new AbortController();
       request.on("aborted", () => abortController.abort());
+      response.on("close", () => {
+        if (!response.writableEnded) abortController.abort();
+      });
       response.writeHead(200, {
         "Content-Type": "application/x-ndjson; charset=utf-8",
         "Cache-Control": "no-store, no-transform",
@@ -1318,14 +1340,16 @@ async function main() {
           requestId,
         );
       } catch (error) {
-        response.write(`${JSON.stringify({
-          type: "error",
-          error: publicRelayError(error),
-          promptSubmitted: error?.promptSubmitted === true,
-        })}\n`);
+        if (!abortController.signal.aborted && !response.destroyed && !response.writableEnded) {
+          response.write(`${JSON.stringify({
+            type: "error",
+            error: publicRelayError(error),
+            promptSubmitted: error?.promptSubmitted === true,
+          })}\n`);
+        }
       } finally {
         relayLog("request.closed", { requestId });
-        response.end();
+        if (!response.destroyed && !response.writableEnded) response.end();
       }
       return;
     }

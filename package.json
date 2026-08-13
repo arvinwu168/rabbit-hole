@@ -9,7 +9,8 @@
     "lint": "eslint .",
     "relay": "node scripts/chatgpt-relay.mjs",
     "relay:login": "node scripts/chatgpt-relay.mjs --login",
-    "test": "npm run test:inference && npm run test:relay",
+    "test": "npm run test:arbor && npm run test:inference && npm run test:relay",
+    "test:arbor": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/arbor.test.mjs",
     "test:inference": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/inference-options.test.mjs",
     "test:relay": "node --test scripts/chatgpt-relay.test.mjs"
   },

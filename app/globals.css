@@ -731,6 +731,28 @@ button:disabled {
   color: var(--danger);
 }
 
+.message-status.is-cancelled {
+  color: var(--ink-faint);
+}
+
+.cancel-generation-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 6px;
+  color: var(--danger);
+  background: transparent;
+  border: 0;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.cancel-generation-button:hover {
+  background: color-mix(in srgb, var(--danger) 9%, transparent);
+}
+
 .markdown-body {
   color: #303630;
   font-size: 14.5px;
@@ -988,6 +1010,11 @@ button:disabled {
 
 .thinking-placeholder span:nth-child(3) {
   animation-delay: 240ms;
+}
+
+.cancelled-placeholder {
+  color: var(--ink-faint);
+  font-style: italic;
 }
 
 .branch-shelf {
@@ -1668,6 +1695,14 @@ button:disabled {
 
 .send-button:disabled {
   opacity: 0.34;
+}
+
+.send-button.is-stop {
+  background: var(--ink-soft);
+}
+
+.send-button.is-stop:hover {
+  background: var(--danger);
 }
 
 .composer-meta {

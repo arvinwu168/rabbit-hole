@@ -1,4 +1,4 @@
-export type TurnStatus = "complete" | "streaming" | "error";
+export type TurnStatus = "complete" | "streaming" | "cancelled" | "error";
 
 export type QuoteAnchor = {
   sourceNodeId: string;
@@ -48,6 +48,12 @@ export type WorkspaceState = {
   activeNodeId: string;
 };
 
+export type ConversationMessage = {
+  role: "user" | "assistant";
+  content: string;
+  anchor?: string;
+};
+
 export function createEmptyWorkspace(): WorkspaceState {
   return {
     chats: [],
@@ -76,6 +82,40 @@ export function getChildren(chat: ChatTree, parentId: string): TurnNode[] {
 
 export function getAncestorIds(chat: ChatTree, nodeId: string): string[] {
   return getNodePath(chat, nodeId).map((node) => node.id);
+}
+
+export function buildContinuationMessages(
+  parentPath: TurnNode[],
+  prompt: string,
+  anchor?: QuoteAnchor,
+): ConversationMessage[] {
+  const messages: ConversationMessage[] = [];
+
+  for (const node of parentPath) {
+    messages.push({
+      role: "user",
+      content: node.prompt,
+      ...(node.anchor?.quote ? { anchor: node.anchor.quote } : {}),
+    });
+
+    const response = node.response.trim();
+    if (!response || node.status === "error") continue;
+
+    messages.push({
+      role: "assistant",
+      content: node.status === "cancelled"
+        ? `${response}\n\n[Response stopped by the user before completion.]`
+        : response,
+    });
+  }
+
+  messages.push({
+    role: "user",
+    content: prompt,
+    ...(anchor?.quote ? { anchor: anchor.quote } : {}),
+  });
+
+  return messages;
 }
 
 export function makeChatTitle(prompt: string): string {

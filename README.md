@@ -79,12 +79,12 @@ V0_API_KEY=your_v0_key_here
 
 The model picker provides these paths:
 
-- **AI Gateway · GPT-OSS 120B** — the default baseline, with Gateway choosing a cost-efficient inference provider
+- **AI Gateway · GPT-OSS 120B** — a Gateway baseline with cost-aware provider selection
 - **AI Gateway · Grok 4.1 Fast** — a fast, low-cost xAI model
 - **AI Gateway · Gemini 2.5 Flash Lite** — a budget-oriented Google model
 - **AI Gateway · Claude Haiku 4.5** — a fast, budget-oriented Anthropic model
 - **Groq Direct · GPT-OSS 120B** — bypasses Gateway and uses `GROQ_API_KEY`
-- **v0 Direct · v0 Mini** — the lowest-cost current v0 model for fast web-development tasks
+- **v0 Direct · v0 Mini** — the default and lowest-cost current v0 model for fast web-development tasks
 - **v0 Direct · v0 Pro** — a more capable v0 model for web-development work
 - **ChatGPT Relay · Instant** — uses the separate local signed-in browser relay
 - **Mock · Simulated** — uses no model credits
@@ -92,6 +92,8 @@ The model picker provides these paths:
 The direct Groq path is a deliberate manual fallback, so a failed Gateway request cannot silently trigger a second paid generation. Paid API paths default to a 512-token output cap. The model controls let you choose Automatic, 128, 256, 512, or 1,024 tokens. Numeric choices are clamped by the server to a hard maximum of 1,024 even if the UI is bypassed. Automatic omits the output-token field, allowing the model to stop naturally at an end condition or its provider-defined maximum; it can therefore cost more than a numeric cap. Gateway requests are tagged for Arbor and ask Gateway to prefer the lowest-cost available provider.
 
 The current v0 Platform API does not expose an output-token cap. Arbor therefore disables thinking, image generation, MCP servers, and skills for v0 requests and asks for concise Markdown responses. Each v0 request creates a private, `source: arbor` v0 chat containing the current Arbor branch transcript; these chats appear in the v0 account and consume v0 credits rather than AI Gateway credits.
+
+Every in-progress turn exposes a Stop action while the request is being sent, waiting on the model, or streaming output. Cancelling preserves any partial response and aborts only that turn; other concurrent chats keep running.
 
 Neither key is sent to the browser. The `/api/chat` route uses AI SDK Core for Gateway streaming and native `fetch` for the independent Groq path. Both feed the same incremental response UI, while Gateway stream errors are carried explicitly so account or provider failures are visible instead of appearing as empty answers.
 

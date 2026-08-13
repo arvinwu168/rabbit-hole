@@ -21,6 +21,7 @@ import {
   publicRelayError,
   relayBrowserArgs,
   selectInstantModel,
+  stopActiveChatGptGeneration,
 } from "./chatgpt-relay.mjs";
 
 test("a root prompt is sent to ChatGPT without relay scaffolding", () => {
@@ -365,6 +366,41 @@ test("a cancelled queued generation is removed without consuming a slot", async 
 
   gate.release();
   assert.equal(gate.active, 0);
+});
+
+test("cancelling a submitted relay generation clicks ChatGPT's stop control", async () => {
+  let clicks = 0;
+  const stopButton = {
+    first: () => stopButton,
+    isVisible: async () => true,
+    click: async (options) => {
+      assert.deepEqual(options, { timeout: 1_500 });
+      clicks += 1;
+    },
+  };
+  const page = {
+    isClosed: () => false,
+    locator: (selector) => {
+      assert.match(selector, /stop-button/);
+      return stopButton;
+    },
+  };
+
+  assert.equal(await stopActiveChatGptGeneration(page), true);
+  assert.equal(clicks, 1);
+});
+
+test("relay cancellation tolerates a response that has no visible stop control", async () => {
+  const stopButton = {
+    first: () => stopButton,
+    isVisible: async () => false,
+  };
+  const page = {
+    isClosed: () => false,
+    locator: () => stopButton,
+  };
+
+  assert.equal(await stopActiveChatGptGeneration(page), false);
 });
 
 test("automation internals are not exposed as Arbor response text", () => {

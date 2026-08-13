@@ -24,6 +24,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Square,
   SquarePen,
   Terminal,
   UserRound,
@@ -48,6 +49,7 @@ import {
   RelayLatencyMetrics,
   TurnNode,
   WorkspaceState,
+  buildContinuationMessages,
   createEmptyWorkspace,
   getAncestorIds,
   getChildren,
@@ -644,7 +646,11 @@ function StatusMark({ status }: { status: TurnNode["status"] }) {
   }
 
   if (status === "error") {
-    return <span className="message-status is-error">Generation stopped</span>;
+    return <span className="message-status is-error">Generation failed</span>;
+  }
+
+  if (status === "cancelled") {
+    return <span className="message-status is-cancelled">Stopped</span>;
   }
 
   return null;
@@ -844,6 +850,8 @@ export function ArborApp() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const followStreamRef = useRef(true);
   const lastViewedNodeIdRef = useRef<string | null>(null);
+  const pendingPreservedScrollTopRef = useRef<number | null>(null);
+  const generationControllersRef = useRef<Map<string, AbortController>>(new Map());
 
   const activeChat = useMemo(
     () => workspace.chats.find((chat) => chat.id === workspace.activeChatId) ?? workspace.chats[0],
@@ -1076,6 +1084,13 @@ export function ArborApp() {
     };
   }, [signInOpen]);
 
+  useEffect(() => () => {
+    for (const controller of generationControllersRef.current.values()) {
+      controller.abort();
+    }
+    generationControllersRef.current.clear();
+  }, []);
+
   useLayoutEffect(() => {
     const composer = composerRef.current;
     if (!composer) return;
@@ -1085,13 +1100,22 @@ export function ArborApp() {
     composer.style.overflowY = composer.scrollHeight > 200 ? "auto" : "hidden";
   }, [composerValue]);
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const scrollElement = scrollRef.current;
     if (!activeNode || !scrollElement) return;
 
     const nodeChanged = lastViewedNodeIdRef.current !== activeNode.id;
     if (nodeChanged) {
       lastViewedNodeIdRef.current = activeNode.id;
+      const preservedScrollTop = pendingPreservedScrollTopRef.current;
+      pendingPreservedScrollTopRef.current = null;
+
+      if (preservedScrollTop !== null) {
+        followStreamRef.current = false;
+        scrollElement.scrollTo({ top: preservedScrollTop, behavior: "auto" });
+        return;
+      }
+
       followStreamRef.current = true;
     } else if (activeNode.status !== "streaming" || !followStreamRef.current) {
       return;
@@ -1166,6 +1190,28 @@ export function ArborApp() {
     }));
   }
 
+  function cancelGeneration(chatId: string, nodeId: string) {
+    const controller = generationControllersRef.current.get(nodeId);
+    controller?.abort();
+    generationControllersRef.current.delete(nodeId);
+
+    setWorkspace((current) => ({
+      ...current,
+      chats: current.chats.map((chat) => {
+        const node = chat.nodes[nodeId];
+        if (chat.id !== chatId || !node || node.status !== "streaming") return chat;
+        return {
+          ...chat,
+          updatedAt: Date.now(),
+          nodes: {
+            ...chat.nodes,
+            [nodeId]: { ...node, status: "cancelled" },
+          },
+        };
+      }),
+    }));
+  }
+
   async function streamIntoNode(
     chatId: string,
     nodeId: string,
@@ -1177,6 +1223,8 @@ export function ArborApp() {
     // This runs only after a submit event and measures the local request lifecycle.
     // eslint-disable-next-line react-hooks/purity
     const requestStartedAt = Date.now();
+    const controller = new AbortController();
+    generationControllersRef.current.set(nodeId, controller);
     try {
       const usingRelay = selectedInference.transport === "relay";
       if (usingRelay && relayStatus !== "ready") {
@@ -1200,8 +1248,9 @@ export function ArborApp() {
                 devMode: IS_DEVELOPMENT && devMode,
                 ...(effectiveMaxTokens ? { maxTokens: effectiveMaxTokens } : {}),
                 ...(fixtureId ? { fixtureId } : {}),
-              },
+          },
         ),
+        signal: controller.signal,
       });
 
       if (!response.ok || !response.body) {
@@ -1324,6 +1373,11 @@ export function ArborApp() {
 
       updateNode(chatId, nodeId, { status: "complete", response: content });
     } catch (error) {
+      if (controller.signal.aborted) {
+        updateNode(chatId, nodeId, { status: "cancelled" });
+        return;
+      }
+
       const detail = error instanceof Error ? error.message : "Unknown inference error";
       if (
         selectedInference.transport === "relay"
@@ -1336,11 +1390,19 @@ export function ArborApp() {
         status: "error",
         response: `Generation was interrupted: ${detail.slice(0, 320)}`,
       });
+    } finally {
+      if (generationControllersRef.current.get(nodeId) === controller) {
+        generationControllersRef.current.delete(nodeId);
+      }
     }
   }
 
-  function selectNode(chatId: string, nodeId: string) {
+  function selectNode(chatId: string, nodeId: string, preserveScroll = false) {
     const chat = workspace.chats.find((item) => item.id === chatId);
+    const destinationChanged = workspace.activeChatId !== chatId || workspace.activeNodeId !== nodeId;
+    pendingPreservedScrollTopRef.current = preserveScroll && destinationChanged
+      ? scrollRef.current?.scrollTop ?? null
+      : null;
     setWorkspace((current) => ({ ...current, activeChatId: chatId, activeNodeId: nodeId }));
     setNewChatMode(false);
     setBranchContext(null);
@@ -1537,23 +1599,7 @@ export function ArborApp() {
       anchor,
     };
     const parentPath = getNodePath(activeChat, parentId);
-    const messages: Array<{
-      role: "user" | "assistant";
-      content: string;
-      anchor?: string;
-    }> = parentPath.flatMap((node) => [
-      {
-        role: "user" as const,
-        content: node.prompt,
-        ...(node.anchor?.quote ? { anchor: node.anchor.quote } : {}),
-      },
-      { role: "assistant" as const, content: node.response },
-    ]);
-    messages.push({
-      role: "user",
-      content: prompt,
-      ...(anchor?.quote ? { anchor: anchor.quote } : {}),
-    });
+    const messages = buildContinuationMessages(parentPath, prompt, anchor);
 
     setWorkspace((current) => ({
       ...current,
@@ -1578,6 +1624,10 @@ export function ArborApp() {
     if (!window.confirm("Start a fresh guest session? All chats and branches in this tab will be removed.")) {
       return;
     }
+    for (const controller of generationControllersRef.current.values()) {
+      controller.abort();
+    }
+    generationControllersRef.current.clear();
     window.sessionStorage.removeItem(GUEST_WORKSPACE_STORAGE_KEY);
     setWorkspace(createEmptyWorkspace());
     setExpandedIds(new Set());
@@ -1792,6 +1842,16 @@ export function ArborApp() {
                           </a>
                         ) : null}
                         <StatusMark status={node.status} />
+                        {node.status === "streaming" && activeChat ? (
+                          <button
+                            type="button"
+                            className="cancel-generation-button"
+                            onClick={() => cancelGeneration(activeChat.id, node.id)}
+                            aria-label={`Stop generating response to ${makeChatTitle(node.prompt)}`}
+                          >
+                            <Square size={9} fill="currentColor" /> Stop
+                          </button>
+                        ) : null}
                       </div>
 
                       <div
@@ -1804,12 +1864,14 @@ export function ArborApp() {
                       >
                         {node.response ? (
                           <MarkdownResponse content={node.response} />
-                        ) : (
+                        ) : node.status === "streaming" ? (
                           <span className="thinking-placeholder">
                             <span />
                             <span />
                             <span />
                           </span>
+                        ) : (
+                          <span className="cancelled-placeholder">No response was returned.</span>
                         )}
                       </div>
 
@@ -1821,7 +1883,7 @@ export function ArborApp() {
                           onToggleMenu={() =>
                             setOpenBranchMenuId((current) => (current === node.id ? null : node.id))
                           }
-                          onSelect={(childId) => selectNode(activeChat.id, childId)}
+                          onSelect={(childId) => selectNode(activeChat.id, childId, true)}
                         />
                       ) : null}
 
@@ -2109,18 +2171,29 @@ export function ArborApp() {
                     : undefined
                 }
               />
-              <button
-                type="submit"
-                className="send-button"
-                disabled={
-                  !composerValue.trim()
-                  || composerBlockedByGeneration
-                  || (inferenceOptionId === "chatgpt-relay" && relayStatus !== "ready")
-                }
-                aria-label={isCommandInput ? "Run command" : "Send message"}
-              >
-                {composerBlockedByGeneration ? <LoaderCircle size={17} className="spin" /> : <ArrowUp size={17} />}
-              </button>
+              {composerBlockedByGeneration && activeChat && composerParent ? (
+                <button
+                  type="button"
+                  className="send-button is-stop"
+                  onClick={() => cancelGeneration(activeChat.id, composerParent.id)}
+                  aria-label="Stop generation"
+                  title="Stop generation"
+                >
+                  <Square size={12} fill="currentColor" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  className="send-button"
+                  disabled={
+                    !composerValue.trim()
+                    || (inferenceOptionId === "chatgpt-relay" && relayStatus !== "ready")
+                  }
+                  aria-label={isCommandInput ? "Run command" : "Send message"}
+                >
+                  <ArrowUp size={17} />
+                </button>
+              )}
             </div>
             <div className="composer-meta">
               <span>

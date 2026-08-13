@@ -95,12 +95,16 @@ export const INFERENCE_OPTIONS = {
 
 export type InferenceOptionId = keyof typeof INFERENCE_OPTIONS;
 
-export const DEFAULT_INFERENCE_OPTION_ID: InferenceOptionId = "gateway-gpt-oss-120b";
+export const DEFAULT_INFERENCE_OPTION_ID: InferenceOptionId = "v0-direct-mini";
 
 export const INFERENCE_OPTION_GROUPS: ReadonlyArray<{
   label: string;
   optionIds: readonly InferenceOptionId[];
 }> = [
+  {
+    label: "v0 credits",
+    optionIds: ["v0-direct-mini", "v0-direct-pro"],
+  },
   {
     label: "Vercel AI Gateway",
     optionIds: [
@@ -113,10 +117,6 @@ export const INFERENCE_OPTION_GROUPS: ReadonlyArray<{
   {
     label: "Backup paths",
     optionIds: ["groq-direct-gpt-oss-120b", "chatgpt-relay"],
-  },
-  {
-    label: "v0 credits",
-    optionIds: ["v0-direct-mini", "v0-direct-pro"],
   },
   {
     label: "Development",

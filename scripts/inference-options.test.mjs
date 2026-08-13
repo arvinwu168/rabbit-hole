@@ -33,7 +33,8 @@ test("the catalog exposes four Gateway models and independent backup paths", () 
   assert.equal(INFERENCE_OPTIONS["v0-direct-mini"].supportsOutputCap, false);
   assert.equal(INFERENCE_OPTIONS["chatgpt-relay"].transport, "relay");
   assert.equal(INFERENCE_OPTIONS.mock.transport, "mock");
-  assert.equal(INFERENCE_OPTIONS[DEFAULT_INFERENCE_OPTION_ID].transport, "gateway");
+  assert.equal(DEFAULT_INFERENCE_OPTION_ID, "v0-direct-mini");
+  assert.equal(INFERENCE_OPTIONS[DEFAULT_INFERENCE_OPTION_ID].transport, "v0");
 });
 
 test("output token limits support automatic mode, floor, and clamp on the server", () => {
