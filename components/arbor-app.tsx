@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  FlaskConical,
   GitBranch,
   Leaf,
   LoaderCircle,
@@ -19,10 +20,10 @@ import {
   Sparkles,
   SquarePen,
   X,
+  Zap,
 } from "lucide-react";
 import {
   FormEvent,
-  MouseEvent,
   useEffect,
   useId,
   useLayoutEffect,
@@ -45,7 +46,8 @@ import {
 } from "@/lib/arbor";
 
 const STORAGE_KEY = "arbor-workspace-v1";
-const DEVTOOLS_STORAGE_KEY = "arbor-devtools-visible";
+const MODEL_CONTROLS_STORAGE_KEY = "arbor-model-controls-visible";
+const DEV_MODE_STORAGE_KEY = "arbor-dev-mode";
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
 
 type InferenceProvider = "mock" | "groq";
@@ -67,6 +69,7 @@ const INFERENCE_OPTIONS: Record<
 };
 
 const MAX_TOKEN_OPTIONS = [128, 256, 512, 1024] as const;
+type TokenLimit = "automatic" | (typeof MAX_TOKEN_OPTIONS)[number];
 
 function inferenceLabel(provider: InferenceProvider, maxTokens?: number): string {
   const option = INFERENCE_OPTIONS[provider];
@@ -98,6 +101,33 @@ type TextSelection = {
   left: number;
   top: number;
 };
+
+function getResponseSelection(): TextSelection | null {
+  const selected = window.getSelection();
+  if (!selected || selected.isCollapsed || selected.rangeCount === 0) return null;
+
+  const anchorElement =
+    selected.anchorNode instanceof Element ? selected.anchorNode : selected.anchorNode?.parentElement;
+  const focusElement =
+    selected.focusNode instanceof Element ? selected.focusNode : selected.focusNode?.parentElement;
+  const anchorResponse = anchorElement?.closest<HTMLElement>(".markdown-body[data-node-id]");
+  const focusResponse = focusElement?.closest<HTMLElement>(".markdown-body[data-node-id]");
+
+  if (!anchorResponse || anchorResponse !== focusResponse) return null;
+
+  const quote = selected.toString().trim().replace(/\s+/g, " ");
+  if (!quote) return null;
+
+  const rect = selected.getRangeAt(0).getBoundingClientRect();
+  if (!rect.width && !rect.height) return null;
+
+  return {
+    nodeId: anchorResponse.dataset.nodeId ?? "",
+    quote: quote.slice(0, 480),
+    left: Math.max(132, Math.min(window.innerWidth - 132, rect.left + rect.width / 2)),
+    top: Math.max(52, rect.top - 9),
+  };
+}
 
 async function writeToClipboard(text: string): Promise<boolean> {
   try {
@@ -131,6 +161,50 @@ const MARKDOWN_COMPONENTS: Components = {
     return <a {...props} target="_blank" rel="noreferrer" />;
   },
 };
+
+function normalizeModelMarkdown(content: string): string {
+  const fencedCode = /```[\s\S]*?```/g;
+  let cursor = 0;
+  let normalized = "";
+
+  for (const match of content.matchAll(fencedCode)) {
+    const index = match.index ?? 0;
+    normalized += content.slice(cursor, index).replace(/<br\s*\/?\s*>/gi, "  \n");
+    normalized += match[0];
+    cursor = index + match[0].length;
+  }
+
+  return normalized + content.slice(cursor).replace(/<br\s*\/?\s*>/gi, "  \n");
+}
+
+function ProviderIdentity({ model }: { model: string }) {
+  const segments = model.split(" · ").map((segment) => segment.trim()).filter(Boolean);
+  let provider = segments.shift() ?? "AI";
+  let details = segments.join(" · ");
+
+  if (provider === "Simulated") {
+    provider = "Mock";
+    details = "Simulated";
+  }
+
+  const providerKey = provider.toLowerCase();
+  const isMock = providerKey === "mock";
+  const isGroq = providerKey === "groq";
+  const isGrok = providerKey === "grok";
+
+  return (
+    <>
+      <span
+        className={`response-provider-icon ${isMock ? "is-mock" : isGroq ? "is-groq" : isGrok ? "is-grok" : "is-generic"}`}
+        aria-hidden="true"
+      >
+        {isMock ? <FlaskConical size={13} /> : isGroq ? <Zap size={13} /> : <Sparkles size={13} />}
+      </span>
+      <span className="response-provider-name">{provider}</span>
+      {details ? <span className="model-name">{details}</span> : null}
+    </>
+  );
+}
 
 function MermaidDiagram({ chart }: { chart: string }) {
   const reactId = useId();
@@ -199,19 +273,24 @@ function MermaidDiagram({ chart }: { chart: string }) {
 }
 
 function MarkdownResponse({ content }: { content: string }) {
+  const normalizedContent = normalizeModelMarkdown(content);
   const parts: Array<{ type: "markdown" | "mermaid"; content: string }> = [];
   const mermaidFence = /```mermaid[ \t]*\n([\s\S]*?)```/gi;
   let cursor = 0;
 
-  for (const match of content.matchAll(mermaidFence)) {
+  for (const match of normalizedContent.matchAll(mermaidFence)) {
     const index = match.index ?? 0;
-    if (index > cursor) parts.push({ type: "markdown", content: content.slice(cursor, index) });
+    if (index > cursor) {
+      parts.push({ type: "markdown", content: normalizedContent.slice(cursor, index) });
+    }
     parts.push({ type: "mermaid", content: match[1].trim() });
     cursor = index + match[0].length;
   }
 
-  if (cursor < content.length) parts.push({ type: "markdown", content: content.slice(cursor) });
-  if (!parts.length) parts.push({ type: "markdown", content });
+  if (cursor < normalizedContent.length) {
+    parts.push({ type: "markdown", content: normalizedContent.slice(cursor) });
+  }
+  if (!parts.length) parts.push({ type: "markdown", content: normalizedContent });
 
   return parts.map((part, index) =>
     part.type === "mermaid" ? (
@@ -512,8 +591,9 @@ export function ArborApp() {
   const [copiedNodeId, setCopiedNodeId] = useState<string | null>(null);
   const [openBranchMenuId, setOpenBranchMenuId] = useState<string | null>(null);
   const [inferenceProvider, setInferenceProvider] = useState<InferenceProvider>("groq");
-  const [maxTokens, setMaxTokens] = useState(256);
-  const [devToolsVisible, setDevToolsVisible] = useState(true);
+  const [maxTokens, setMaxTokens] = useState<TokenLimit>("automatic");
+  const [modelControlsVisible, setModelControlsVisible] = useState(true);
+  const [devMode, setDevMode] = useState(false);
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -530,11 +610,13 @@ export function ArborApp() {
     Object.values(chat.nodes).some((node) => node.status === "streaming"),
   );
   const selectedInference = INFERENCE_OPTIONS[inferenceProvider];
-  const selectedInferenceLabel = inferenceLabel(inferenceProvider, maxTokens);
+  const effectiveMaxTokens = devMode && typeof maxTokens === "number" ? maxTokens : undefined;
+  const selectedInferenceLabel = inferenceLabel(inferenceProvider, effectiveMaxTokens);
 
   useEffect(() => {
     let restored: WorkspaceState | null = null;
-    let restoredDevToolsVisibility: boolean | null = null;
+    let restoredModelControlsVisibility: boolean | null = null;
+    let restoredDevMode = false;
     try {
       const saved = window.localStorage.getItem(STORAGE_KEY);
       if (saved) {
@@ -543,9 +625,12 @@ export function ArborApp() {
           restored = parsed;
         }
       }
-      const savedDevToolsVisibility = window.localStorage.getItem(DEVTOOLS_STORAGE_KEY);
-      if (savedDevToolsVisibility !== null) {
-        restoredDevToolsVisibility = savedDevToolsVisibility === "true";
+      const savedModelControlsVisibility = window.localStorage.getItem(MODEL_CONTROLS_STORAGE_KEY);
+      if (savedModelControlsVisibility !== null) {
+        restoredModelControlsVisibility = savedModelControlsVisibility === "true";
+      }
+      if (IS_DEVELOPMENT) {
+        restoredDevMode = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "true";
       }
     } catch {
       window.localStorage.removeItem(STORAGE_KEY);
@@ -557,9 +642,10 @@ export function ArborApp() {
         const chat = restored.chats.find((item) => item.id === restored?.activeChatId);
         if (chat) setExpandedIds(new Set(getAncestorIds(chat, restored.activeNodeId)));
       }
-      if (restoredDevToolsVisibility !== null) {
-        setDevToolsVisible(restoredDevToolsVisibility);
+      if (restoredModelControlsVisibility !== null) {
+        setModelControlsVisible(restoredModelControlsVisibility);
       }
+      if (IS_DEVELOPMENT) setDevMode(restoredDevMode);
       setHydrated(true);
     });
 
@@ -575,9 +661,14 @@ export function ArborApp() {
   }, [hydrated, workspace]);
 
   useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(MODEL_CONTROLS_STORAGE_KEY, String(modelControlsVisible));
+  }, [modelControlsVisible, hydrated]);
+
+  useEffect(() => {
     if (!hydrated || !IS_DEVELOPMENT) return;
-    window.localStorage.setItem(DEVTOOLS_STORAGE_KEY, String(devToolsVisible));
-  }, [devToolsVisible, hydrated]);
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, String(devMode));
+  }, [devMode, hydrated]);
 
   useLayoutEffect(() => {
     const composer = composerRef.current;
@@ -617,6 +708,26 @@ export function ArborApp() {
     };
   }, []);
 
+  useEffect(() => {
+    const captureSelection = () => {
+      const nextSelection = getResponseSelection();
+      if (nextSelection?.nodeId) setSelection(nextSelection);
+    };
+    const captureKeyboardSelection = (event: KeyboardEvent) => {
+      if (event.shiftKey) captureSelection();
+    };
+    const captureTouchSelection = () => window.setTimeout(captureSelection, 0);
+
+    document.addEventListener("mouseup", captureSelection);
+    document.addEventListener("keyup", captureKeyboardSelection);
+    document.addEventListener("touchend", captureTouchSelection);
+    return () => {
+      document.removeEventListener("mouseup", captureSelection);
+      document.removeEventListener("keyup", captureKeyboardSelection);
+      document.removeEventListener("touchend", captureTouchSelection);
+    };
+  }, []);
+
   function updateNode(chatId: string, nodeId: string, update: Partial<TurnNode>) {
     setWorkspace((current) => ({
       ...current,
@@ -646,7 +757,14 @@ export function ArborApp() {
       const response = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ prompt, messages, anchor, provider: inferenceProvider, maxTokens }),
+        body: JSON.stringify({
+          prompt,
+          messages,
+          anchor,
+          provider: inferenceProvider,
+          devMode: IS_DEVELOPMENT && devMode,
+          ...(effectiveMaxTokens ? { maxTokens: effectiveMaxTokens } : {}),
+        }),
       });
 
       if (!response.ok || !response.body) {
@@ -706,22 +824,6 @@ export function ArborApp() {
     setOpenBranchMenuId(null);
     window.getSelection()?.removeAllRanges();
     window.setTimeout(() => composerRef.current?.focus(), 0);
-  }
-
-  function handleTextSelection(nodeId: string, event: MouseEvent<HTMLDivElement>) {
-    const selected = window.getSelection();
-    if (!selected || selected.isCollapsed || selected.rangeCount === 0) return;
-    const anchorNode = selected.anchorNode;
-    const focusNode = selected.focusNode;
-    if (!anchorNode || !focusNode) return;
-    if (!event.currentTarget.contains(anchorNode) || !event.currentTarget.contains(focusNode)) return;
-
-    const quote = selected.toString().trim().replace(/\s+/g, " ");
-    if (quote.length < 3) return;
-    const range = selected.getRangeAt(0);
-    const rect = range.getBoundingClientRect();
-    const left = Math.max(132, Math.min(window.innerWidth - 132, rect.left + rect.width / 2));
-    setSelection({ nodeId, quote: quote.slice(0, 480), left, top: rect.top - 9 });
   }
 
   async function copyResponse(node: TurnNode) {
@@ -878,11 +980,11 @@ export function ArborApp() {
           </ul>
         </nav>
 
-        {IS_DEVELOPMENT && devToolsVisible ? (
+        {IS_DEVELOPMENT && devMode ? (
           <div className="sidebar-footer">
             <span className="provider-dot" />
-            <span>Development</span>
-            <span className="provider-name">{selectedInference.label}</span>
+            <span>Development mode</span>
+            <span className="provider-name">Fixtures on</span>
           </div>
         ) : null}
       </aside>
@@ -914,21 +1016,36 @@ export function ArborApp() {
             )}
           </div>
           <div className="main-header-actions">
-            {IS_DEVELOPMENT && devToolsVisible ? (
+            {modelControlsVisible ? (
               <span className={`inference-badge is-${inferenceProvider}`}>
                 <Sparkles size={13} /> {selectedInference.label} · {selectedInference.modelLabel}
               </span>
             ) : null}
+            <button
+              type="button"
+              className={`icon-button model-controls-toggle ${modelControlsVisible ? "is-active" : ""}`}
+              onClick={() => setModelControlsVisible((visible) => !visible)}
+              aria-label={`${modelControlsVisible ? "Hide" : "Show"} model controls`}
+              aria-pressed={modelControlsVisible}
+              title={`${modelControlsVisible ? "Hide" : "Show"} model controls`}
+            >
+              <SlidersHorizontal size={16} />
+            </button>
             {IS_DEVELOPMENT ? (
               <button
                 type="button"
-                className={`icon-button devtools-toggle ${devToolsVisible ? "is-active" : ""}`}
-                onClick={() => setDevToolsVisible((visible) => !visible)}
-                aria-label={`${devToolsVisible ? "Hide" : "Show"} development controls`}
-                aria-pressed={devToolsVisible}
-                title={`${devToolsVisible ? "Hide" : "Show"} development controls`}
+                className={`icon-button dev-mode-toggle ${devMode ? "is-active" : ""}`}
+                onClick={() => {
+                  setDevMode((enabled) => {
+                    if (!enabled) setModelControlsVisible(true);
+                    return !enabled;
+                  });
+                }}
+                aria-label={`${devMode ? "Disable" : "Enable"} development mode`}
+                aria-pressed={devMode}
+                title={`${devMode ? "Disable" : "Enable"} development mode`}
               >
-                <SlidersHorizontal size={16} />
+                <FlaskConical size={16} />
               </button>
             ) : null}
             <button type="button" className="icon-button" onClick={resetWorkspace} aria-label="Reset demo">
@@ -971,17 +1088,17 @@ export function ArborApp() {
 
                     <div className="assistant-message">
                       <div className="assistant-head">
-                        <span className="assistant-avatar" aria-hidden="true">
-                          <Leaf size={14} />
-                        </span>
-                        <span className="assistant-name">Arbor</span>
-                        <span className="model-name">{node.model}</span>
+                        <ProviderIdentity model={node.model} />
                         <StatusMark status={node.status} />
                       </div>
 
                       <div
                         className={`markdown-body ${node.status === "streaming" ? "is-streaming" : ""}`}
-                        onMouseUp={(event) => handleTextSelection(node.id, event)}
+                        data-node-id={node.id}
+                        onMouseUp={() => {
+                          const nextSelection = getResponseSelection();
+                          if (nextSelection?.nodeId) setSelection(nextSelection);
+                        }}
                       >
                         {node.response ? (
                           <MarkdownResponse content={node.response} />
@@ -1042,11 +1159,15 @@ export function ArborApp() {
               </div>
             ) : null}
 
-            {IS_DEVELOPMENT && devToolsVisible ? (
-              <div className="developer-controls" aria-label="Development inference settings">
-                <span className="developer-controls-label">Dev</span>
+            {modelControlsVisible ? (
+              <div className="inference-controls" aria-label="Model settings">
+                {IS_DEVELOPMENT && devMode ? (
+                  <span className="developer-controls-label" title="Mock formatting fixtures are enabled">
+                    Dev fixtures
+                  </span>
+                ) : null}
                 <label>
-                  <span>Inference</span>
+                  <span>Model</span>
                   <select
                     value={inferenceProvider}
                     onChange={(event) => setInferenceProvider(event.target.value as InferenceProvider)}
@@ -1059,20 +1180,26 @@ export function ArborApp() {
                 <span className="developer-model" title={selectedInference.model}>
                   {selectedInference.modelLabel}
                 </span>
-                <label>
-                  <span>Max output</span>
-                  <select
-                    value={maxTokens}
-                    onChange={(event) => setMaxTokens(Number(event.target.value))}
-                    disabled={isGenerating}
-                  >
-                    {MAX_TOKEN_OPTIONS.map((tokenCount) => (
-                      <option key={tokenCount} value={tokenCount}>
-                        {tokenCount} tokens
-                      </option>
-                    ))}
-                  </select>
-                </label>
+                {IS_DEVELOPMENT && devMode ? (
+                  <label title="Automatic lets the provider and model decide when to stop">
+                    <span>Output cap</span>
+                    <select
+                      value={maxTokens}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        setMaxTokens(value === "automatic" ? "automatic" : (Number(value) as TokenLimit));
+                      }}
+                      disabled={isGenerating || inferenceProvider !== "groq"}
+                    >
+                      <option value="automatic">Automatic</option>
+                      {MAX_TOKEN_OPTIONS.map((tokenCount) => (
+                        <option key={tokenCount} value={tokenCount}>
+                          {tokenCount} tokens
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </div>
             ) : null}
 

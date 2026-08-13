@@ -11,11 +11,11 @@ type ChatRequest = {
   anchor?: string;
   provider?: InferenceProvider;
   maxTokens?: number;
+  devMode?: boolean;
 };
 
 const GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "openai/gpt-oss-120b";
-const DEFAULT_MAX_TOKENS = 256;
 const MIN_MAX_TOKENS = 32;
 const MAX_MAX_TOKENS = 1024;
 
@@ -73,28 +73,37 @@ const STORAGE_FORMAT_DEMO = [
   "- [ ] Compare workload rating and warranty",
   "- [ ] Verify noise and power requirements",
   "",
+  "## Literal break-tag compatibility",
+  "",
+  "- 初次沸騰時先用中小火，待出現大量泡沫立即轉小火或暫時抬開鍋蓋。<br>- 使用寬口鍋或在鍋邊抹一層薄薄的油，可減少泡沫黏附。",
+  "",
   "For most NAS purchases, recording technology and workload rating matter more than peak interface speed.",
 ].join("\n");
 
-function normalizeMaxTokens(value: unknown): number {
-  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_MAX_TOKENS;
+function normalizeMaxTokens(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined;
   return Math.min(MAX_MAX_TOKENS, Math.max(MIN_MAX_TOKENS, Math.floor(value)));
 }
 
-function inferenceHeaders(provider: string, model: string, maxTokens: number): HeadersInit {
-  return {
+function inferenceHeaders(provider: string, model: string, maxTokens?: number): HeadersInit {
+  const headers: Record<string, string> = {
     "Content-Type": "text/plain; charset=utf-8",
     "Cache-Control": "no-cache, no-transform",
     "X-Arbor-Provider": provider,
     "X-Arbor-Model": model,
-    "X-Arbor-Max-Tokens": String(maxTokens),
   };
+
+  if (maxTokens) headers["X-Arbor-Max-Tokens"] = String(maxTokens);
+  return headers;
 }
 
-function responseFor(prompt: string, anchor?: string): string {
+function responseFor(prompt: string, anchor?: string, fixturesEnabled = false): string {
   const normalized = prompt.toLowerCase();
 
-  if (/3[.\s-]?5.?inch|hard.?disk|hard drive|hdd|storage format|markdown demo/.test(normalized)) {
+  if (
+    fixturesEnabled &&
+    /3[.\s-]?5.?inch|hard.?disk|hard drive|hdd|storage format|markdown demo/.test(normalized)
+  ) {
     return STORAGE_FORMAT_DEMO;
   }
 
@@ -182,7 +191,7 @@ function createGroqTextStream(upstream: ReadableStream<Uint8Array>): ReadableStr
   });
 }
 
-async function groqResponse(body: ChatRequest, request: Request, maxTokens: number): Promise<Response> {
+async function groqResponse(body: ChatRequest, request: Request, maxTokens?: number): Promise<Response> {
   const apiKey = process.env.GROQ_API_KEY;
   if (!apiKey) {
     return new Response("GROQ_API_KEY is not configured on the server.", { status: 503 });
@@ -202,7 +211,7 @@ async function groqResponse(body: ChatRequest, request: Request, maxTokens: numb
       model: GROQ_MODEL,
       messages,
       stream: true,
-      max_completion_tokens: maxTokens,
+      ...(maxTokens ? { max_completion_tokens: maxTokens } : {}),
     }),
     cache: "no-store",
     signal: request.signal,
@@ -232,13 +241,14 @@ export async function POST(request: Request) {
 
   const provider: InferenceProvider = body.provider === "groq" ? "groq" : "mock";
   const maxTokens = normalizeMaxTokens(body.maxTokens);
+  const fixturesEnabled = process.env.NODE_ENV !== "production" && body.devMode === true;
 
   if (provider === "groq") {
     return groqResponse(body, request, maxTokens);
   }
 
   const prompt = body.prompt ?? body.messages?.at(-1)?.content ?? "Explore this idea.";
-  return new Response(createMockStream(responseFor(prompt, body.anchor), request.signal), {
+  return new Response(createMockStream(responseFor(prompt, body.anchor, fixturesEnabled), request.signal), {
     headers: inferenceHeaders("Mock", "simulated", maxTokens),
   });
 }
