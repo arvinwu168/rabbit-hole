@@ -2291,27 +2291,33 @@ export function RabbitHoleApp() {
                         )}
                       </div>
 
-                      {children.length ? (
-                        <BranchShelf
-                          branches={children}
-                          activeBranchId={activeBranchId}
-                          menuOpen={openBranchMenuId === node.id}
-                          onToggleMenu={() =>
-                            setOpenBranchMenuId((current) => (current === node.id ? null : node.id))
-                          }
-                          onSelect={(childId) => selectNode(activeChat.id, childId, true)}
-                        />
-                      ) : null}
+                      {children.length || node.status !== "streaming" ? (
+                        <div className="response-actions-row">
+                          {children.length ? (
+                            <BranchShelf
+                              branches={children}
+                              activeBranchId={activeBranchId}
+                              menuOpen={openBranchMenuId === node.id}
+                              onToggleMenu={() =>
+                                setOpenBranchMenuId((current) => (current === node.id ? null : node.id))
+                              }
+                              onSelect={(childId) => selectNode(activeChat.id, childId, true)}
+                            />
+                          ) : null}
 
-                      {node.status !== "streaming" ? (
-                        <div className="message-actions">
-                          <button type="button" onClick={() => beginBranch(node.id)}>
-                            <GitBranch size={14} /> Branch here
-                          </button>
-                          <button type="button" onClick={() => copyResponse(node)}>
-                            {copiedNodeId === node.id ? <Check size={14} /> : <Copy size={14} />}
-                            {copiedNodeId === node.id ? "Copied" : "Copy"}
-                          </button>
+                          {node.status !== "streaming" ? (
+                            <div className="message-actions">
+                              <button type="button" onClick={() => beginBranch(node.id)}>
+                                <GitBranch size={14} />
+                                <span className="branch-action-label-default">Branch here</span>
+                                <span className="branch-action-label-ipad">Branch</span>
+                              </button>
+                              <button type="button" onClick={() => copyResponse(node)}>
+                                {copiedNodeId === node.id ? <Check size={14} /> : <Copy size={14} />}
+                                {copiedNodeId === node.id ? "Copied" : "Copy"}
+                              </button>
+                            </div>
+                          ) : null}
                         </div>
                       ) : null}
                     </div>

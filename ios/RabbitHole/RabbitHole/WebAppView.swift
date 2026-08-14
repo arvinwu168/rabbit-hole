@@ -4,6 +4,7 @@ import UIKit
 import WebKit
 
 private let branchSelectionMessageName = "rabbitHoleBranchSelection"
+private let promptCopyMessageName = "rabbitHolePromptCopy"
 private let nativeBranchEventName = "rabbit-hole:native-branch-from-selection"
 private let branchSelectionActionIdentifier = UIAction.Identifier(
     "com.rabbit-hole.branch-from-selection"
@@ -16,18 +17,60 @@ struct NativeBranchSelection: Equatable {
     let rect: CGRect
 }
 
+struct NativePromptCopy: Equatable {
+    let text: String
+    let rect: CGRect
+}
+
+@MainActor
+final class RabbitHoleWebView: WKWebView {
+    var branchActionProvider: (() -> UIAction?)?
+
+    override func buildMenu(with builder: any UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        guard builder.system == UIMenuSystem.context,
+              let branchAction = branchActionProvider?(),
+              builder.action(for: branchSelectionActionIdentifier) == nil else { return }
+
+        if #available(iOS 26.0, *) {
+            let copyAction = #selector(UIResponderStandardEditActions.copy(_:))
+            if builder.command(for: copyAction, propertyList: nil) != nil {
+                builder.insertElements([branchAction], beforeCommand: copyAction, propertyList: nil)
+            } else if builder.menu(for: .standardEdit) != nil {
+                builder.insertElements([branchAction], atStartOfMenu: .standardEdit)
+            } else if builder.menu(for: .edit) != nil {
+                builder.insertElements([branchAction], atStartOfMenu: .edit)
+            }
+        } else {
+            let branchMenu = UIMenu(
+                title: "",
+                options: .displayInline,
+                children: [branchAction]
+            )
+            if builder.menu(for: .standardEdit) != nil {
+                builder.insertChild(branchMenu, atStartOfMenu: .standardEdit)
+            } else if builder.menu(for: .edit) != nil {
+                builder.insertChild(branchMenu, atStartOfMenu: .edit)
+            }
+        }
+    }
+}
+
 @MainActor
 final class RabbitHoleWebViewController: UIViewController, @preconcurrency UIEditMenuInteractionDelegate {
-    let webView: WKWebView
+    let webView: RabbitHoleWebView
     var onBranchFromSelection: ((NativeBranchSelection) -> Void)?
     private var branchSelection: NativeBranchSelection?
-    private var branchMenuRequested = false
-    private var branchMenuIsPresented = false
-    private lazy var branchEditMenuInteraction = UIEditMenuInteraction(delegate: self)
+    private var promptCopy: NativePromptCopy?
+    private var promptCopyMenuIsPresented = false
+    private lazy var promptCopyEditMenuInteraction = UIEditMenuInteraction(delegate: self)
 
-    init(webView: WKWebView) {
+    init(webView: RabbitHoleWebView) {
         self.webView = webView
         super.init(nibName: nil, bundle: nil)
+        webView.branchActionProvider = { [weak self] in
+            self?.makeBranchAction()
+        }
     }
 
     @available(*, unavailable)
@@ -39,22 +82,41 @@ final class RabbitHoleWebViewController: UIViewController, @preconcurrency UIEdi
         view = webView
     }
 
-    func updateBranchSelection(_ selection: NativeBranchSelection?) {
-        if selection == nil && branchMenuIsPresented { return }
-        guard branchSelection != selection else { return }
-        branchSelection = selection
-        if branchMenuRequested { presentBranchMenuIfPossible() }
+    private func makeBranchAction() -> UIAction? {
+        guard branchSelection != nil else { return nil }
+        return UIAction(
+            title: "Branch from Selection",
+            image: UIImage(systemName: "arrow.triangle.branch"),
+            identifier: branchSelectionActionIdentifier
+        ) { [weak self] _ in
+            self?.branchFromCurrentSelection()
+        }
     }
 
-    func requestBranchMenu() {
-        branchMenuRequested = true
-        presentBranchMenuIfPossible()
+    func updateBranchSelection(_ selection: NativeBranchSelection?) {
+        guard branchSelection != selection else { return }
+        branchSelection = selection
+        UIMenuSystem.context.setNeedsRebuild()
     }
 
     func systemEditMenuDidDismiss() {
-        guard !branchMenuIsPresented else { return }
-        branchMenuRequested = false
         branchSelection = nil
+    }
+
+    func presentPromptCopyMenu(_ promptCopy: NativePromptCopy) {
+        guard !promptCopyMenuIsPresented else { return }
+
+        self.promptCopy = promptCopy
+        promptCopyMenuIsPresented = true
+        if promptCopyEditMenuInteraction.view == nil {
+            webView.addInteraction(promptCopyEditMenuInteraction)
+        }
+        promptCopyEditMenuInteraction.presentEditMenu(
+            with: UIEditMenuConfiguration(
+                identifier: nil,
+                sourcePoint: CGPoint(x: promptCopy.rect.midX, y: promptCopy.rect.midY)
+            )
+        )
     }
 
     private func branchFromCurrentSelection() {
@@ -93,68 +155,35 @@ final class RabbitHoleWebViewController: UIViewController, @preconcurrency UIEdi
         )
     }
 
-    private func presentBranchMenuIfPossible() {
-        guard branchMenuRequested,
-              let selection = branchSelection,
-              !branchMenuIsPresented else { return }
-
-        branchMenuRequested = false
-        branchMenuIsPresented = true
-        if branchEditMenuInteraction.view == nil {
-            webView.addInteraction(branchEditMenuInteraction)
-        }
-
-        dismissWebKitEditMenus(in: webView)
-        let sourcePoint = CGPoint(x: selection.rect.midX, y: selection.rect.minY)
-        branchEditMenuInteraction.presentEditMenu(
-            with: UIEditMenuConfiguration(identifier: nil, sourcePoint: sourcePoint)
-        )
-    }
-
-    private func dismissWebKitEditMenus(in view: UIView) {
-        for interaction in view.interactions.compactMap({ $0 as? UIEditMenuInteraction })
-        where interaction !== branchEditMenuInteraction {
-            interaction.dismissMenu()
-        }
-        for subview in view.subviews {
-            dismissWebKitEditMenus(in: subview)
-        }
-    }
-
     func editMenuInteraction(
         _ interaction: UIEditMenuInteraction,
         menuFor configuration: UIEditMenuConfiguration,
         suggestedActions: [UIMenuElement]
     ) -> UIMenu? {
-        guard let selection = branchSelection else { return nil }
-
-        let copyAction = UIAction(
-            title: "Copy",
-            image: UIImage(systemName: "doc.on.doc")
-        ) { _ in
-            UIPasteboard.general.string = selection.copyText
-        }
-        let branchAction = UIAction(
-            title: "Branch from Selection",
-            image: UIImage(systemName: "arrow.triangle.branch"),
-            identifier: branchSelectionActionIdentifier
-        ) { [weak self] _ in
-            self?.branchFromCurrentSelection()
+        if interaction === promptCopyEditMenuInteraction {
+            guard let promptCopy else { return nil }
+            let copyAction = UIAction(
+                title: "Copy",
+                image: UIImage(systemName: "doc.on.doc")
+            ) { _ in
+                UIPasteboard.general.string = promptCopy.text
+            }
+            return UIMenu(title: "", options: .displayInline, children: [copyAction])
         }
 
-        return UIMenu(
-            title: "",
-            options: .displayInline,
-            children: [branchAction, copyAction]
-        )
+        return nil
     }
 
     func editMenuInteraction(
         _ interaction: UIEditMenuInteraction,
         targetRectFor configuration: UIEditMenuConfiguration
     ) -> CGRect {
-        guard let rect = branchSelection?.rect else { return .null }
-        return rect.insetBy(dx: -2, dy: -2).intersection(webView.bounds)
+        if interaction === promptCopyEditMenuInteraction {
+            guard let rect = promptCopy?.rect else { return .null }
+            return rect.insetBy(dx: -2, dy: -2).intersection(webView.bounds)
+        }
+
+        return .null
     }
 
     func editMenuInteraction(
@@ -162,7 +191,7 @@ final class RabbitHoleWebViewController: UIViewController, @preconcurrency UIEdi
         willPresentMenuFor configuration: UIEditMenuConfiguration,
         animator: any UIEditMenuInteractionAnimating
     ) {
-        branchMenuIsPresented = true
+        if interaction === promptCopyEditMenuInteraction { promptCopyMenuIsPresented = true }
     }
 
     func editMenuInteraction(
@@ -172,11 +201,12 @@ final class RabbitHoleWebViewController: UIViewController, @preconcurrency UIEdi
     ) {
         animator.addCompletion { [weak self] in
             guard let self else { return }
-            self.branchMenuIsPresented = false
-            self.branchMenuRequested = false
-            self.branchSelection = nil
-            if self.branchEditMenuInteraction.view != nil {
-                self.webView.removeInteraction(self.branchEditMenuInteraction)
+            if interaction === self.promptCopyEditMenuInteraction {
+                self.promptCopyMenuIsPresented = false
+                self.promptCopy = nil
+                if self.promptCopyEditMenuInteraction.view != nil {
+                    self.webView.removeInteraction(self.promptCopyEditMenuInteraction)
+                }
             }
         }
     }
@@ -267,6 +297,8 @@ struct WebAppView: UIViewControllerRepresentable {
                 source: #"""
                 (() => {
                   let pendingFrame = 0;
+                  let promptCopyTimer = 0;
+                  let promptTouchOrigin = null;
 
                   const publishSelection = () => {
                     pendingFrame = 0;
@@ -311,6 +343,56 @@ struct WebAppView: UIViewControllerRepresentable {
 
                   document.addEventListener('selectionchange', scheduleSelectionUpdate, true);
                   document.addEventListener('touchend', () => setTimeout(publishSelection, 0), true);
+
+                  const cancelPromptCopy = () => {
+                    if (promptCopyTimer) window.clearTimeout(promptCopyTimer);
+                    promptCopyTimer = 0;
+                    promptTouchOrigin = null;
+                  };
+
+                  document.addEventListener('touchstart', (event) => {
+                    cancelPromptCopy();
+                    if (event.touches.length !== 1) return;
+
+                    const target = event.target instanceof Element
+                      ? event.target.closest('.user-prompt-viewport')
+                      : null;
+                    if (!target) return;
+
+                    const touch = event.touches[0];
+                    promptTouchOrigin = { x: touch.clientX, y: touch.clientY };
+                    promptCopyTimer = window.setTimeout(() => {
+                      promptCopyTimer = 0;
+                      const copyText = target.textContent || '';
+                      const rect = target.closest('.user-bubble')?.getBoundingClientRect()
+                        || target.getBoundingClientRect();
+                      if (!copyText.trim()) return;
+
+                      window.webkit.messageHandlers.rabbitHolePromptCopy.postMessage({
+                        copyText: copyText.slice(0, 20000),
+                        rect: {
+                          x: rect.x,
+                          y: rect.y,
+                          width: rect.width,
+                          height: rect.height,
+                        },
+                      });
+                    }, 520);
+                  }, { capture: true, passive: true });
+
+                  document.addEventListener('touchmove', (event) => {
+                    if (!promptTouchOrigin || event.touches.length !== 1) return;
+                    const touch = event.touches[0];
+                    if (Math.hypot(
+                      touch.clientX - promptTouchOrigin.x,
+                      touch.clientY - promptTouchOrigin.y
+                    ) > 10) {
+                      cancelPromptCopy();
+                    }
+                  }, { capture: true, passive: true });
+
+                  document.addEventListener('touchend', cancelPromptCopy, true);
+                  document.addEventListener('touchcancel', cancelPromptCopy, true);
                 })();
                 """#,
                 injectionTime: .atDocumentStart,
@@ -321,8 +403,12 @@ struct WebAppView: UIViewControllerRepresentable {
             context.coordinator,
             name: branchSelectionMessageName
         )
+        configuration.userContentController.add(
+            context.coordinator,
+            name: promptCopyMessageName
+        )
 
-        let webView = WKWebView(frame: .zero, configuration: configuration)
+        let webView = RabbitHoleWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
         webView.uiDelegate = context.coordinator
         webView.allowsBackForwardNavigationGestures = false
@@ -374,7 +460,11 @@ struct WebAppView: UIViewControllerRepresentable {
         webView.configuration.userContentController.removeScriptMessageHandler(
             forName: branchSelectionMessageName
         )
+        webView.configuration.userContentController.removeScriptMessageHandler(
+            forName: promptCopyMessageName
+        )
         viewController.onBranchFromSelection = nil
+        webView.branchActionProvider = nil
         coordinator.session.detach(webView)
     }
 
@@ -400,6 +490,33 @@ struct WebAppView: UIViewControllerRepresentable {
             _ userContentController: WKUserContentController,
             didReceive message: WKScriptMessage
         ) {
+            guard message.frameInfo.isMainFrame else { return }
+
+            if message.name == promptCopyMessageName {
+                guard let payload = message.body as? [String: Any],
+                      let rawCopyText = payload["copyText"] as? String,
+                      let rawRect = payload["rect"] as? [String: Any],
+                      let rectX = rawRect["x"] as? NSNumber,
+                      let rectY = rawRect["y"] as? NSNumber,
+                      let rectWidth = rawRect["width"] as? NSNumber,
+                      let rectHeight = rawRect["height"] as? NSNumber else { return }
+
+                let copyText = rawCopyText.trimmingCharacters(in: .whitespacesAndNewlines)
+                guard !copyText.isEmpty else { return }
+                webViewController?.presentPromptCopyMenu(
+                    NativePromptCopy(
+                        text: String(rawCopyText.prefix(20_000)),
+                        rect: CGRect(
+                            x: rectX.doubleValue,
+                            y: rectY.doubleValue,
+                            width: rectWidth.doubleValue,
+                            height: rectHeight.doubleValue
+                        )
+                    )
+                )
+                return
+            }
+
             guard message.name == branchSelectionMessageName,
                   message.frameInfo.isMainFrame else { return }
 
@@ -447,7 +564,7 @@ struct WebAppView: UIViewControllerRepresentable {
             willPresentEditMenuWithAnimator animator: any UIEditMenuInteractionAnimating
         ) {
             editMenuIsPresented = true
-            webViewController?.requestBranchMenu()
+            UIMenuSystem.context.setNeedsRebuild()
         }
 
         func webView(
