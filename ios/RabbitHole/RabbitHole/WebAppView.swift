@@ -12,13 +12,18 @@ private let branchSelectionActionIdentifier = UIAction.Identifier(
 struct NativeBranchSelection: Equatable {
     let nodeId: String
     let quote: String
+    let copyText: String
+    let rect: CGRect
 }
 
 @MainActor
-final class RabbitHoleWebViewController: UIViewController {
+final class RabbitHoleWebViewController: UIViewController, @preconcurrency UIEditMenuInteractionDelegate {
     let webView: WKWebView
     var onBranchFromSelection: ((NativeBranchSelection) -> Void)?
     private var branchSelection: NativeBranchSelection?
+    private var branchMenuRequested = false
+    private var branchMenuIsPresented = false
+    private lazy var branchEditMenuInteraction = UIEditMenuInteraction(delegate: self)
 
     init(webView: WKWebView) {
         self.webView = webView
@@ -34,38 +39,146 @@ final class RabbitHoleWebViewController: UIViewController {
         view = webView
     }
 
-    override func buildMenu(with builder: UIMenuBuilder) {
-        super.buildMenu(with: builder)
-        guard builder.system == .context else { return }
-        guard branchSelection != nil,
-              builder.action(for: branchSelectionActionIdentifier) == nil else { return }
+    func updateBranchSelection(_ selection: NativeBranchSelection?) {
+        if selection == nil && branchMenuIsPresented { return }
+        guard branchSelection != selection else { return }
+        branchSelection = selection
+        if branchMenuRequested { presentBranchMenuIfPossible() }
+    }
 
-        let action = UIAction(
+    func requestBranchMenu() {
+        branchMenuRequested = true
+        presentBranchMenuIfPossible()
+    }
+
+    func systemEditMenuDidDismiss() {
+        guard !branchMenuIsPresented else { return }
+        branchMenuRequested = false
+        branchSelection = nil
+    }
+
+    private func branchFromCurrentSelection() {
+        if let branchSelection {
+            onBranchFromSelection?(branchSelection)
+            return
+        }
+
+        webView.evaluateJavaScript(
+            #"""
+            (() => {
+              const selected = window.getSelection();
+              if (!selected || selected.isCollapsed || selected.rangeCount === 0) return false;
+
+              const anchorElement = selected.anchorNode instanceof Element
+                ? selected.anchorNode
+                : selected.anchorNode?.parentElement;
+              const focusElement = selected.focusNode instanceof Element
+                ? selected.focusNode
+                : selected.focusNode?.parentElement;
+              const anchorResponse = anchorElement?.closest('.markdown-body[data-node-id]');
+              const focusResponse = focusElement?.closest('.markdown-body[data-node-id]');
+              const quote = selected.toString().trim().replace(/\s+/g, ' ');
+
+              if (!anchorResponse || anchorResponse !== focusResponse || !quote) return false;
+
+              window.dispatchEvent(new CustomEvent('rabbit-hole:native-branch-from-selection', {
+                detail: {
+                  nodeId: anchorResponse.dataset.nodeId || '',
+                  quote: quote.slice(0, 480),
+                },
+              }));
+              return true;
+            })();
+            """#
+        )
+    }
+
+    private func presentBranchMenuIfPossible() {
+        guard branchMenuRequested,
+              let selection = branchSelection,
+              !branchMenuIsPresented else { return }
+
+        branchMenuRequested = false
+        branchMenuIsPresented = true
+        if branchEditMenuInteraction.view == nil {
+            webView.addInteraction(branchEditMenuInteraction)
+        }
+
+        dismissWebKitEditMenus(in: webView)
+        let sourcePoint = CGPoint(x: selection.rect.midX, y: selection.rect.minY)
+        branchEditMenuInteraction.presentEditMenu(
+            with: UIEditMenuConfiguration(identifier: nil, sourcePoint: sourcePoint)
+        )
+    }
+
+    private func dismissWebKitEditMenus(in view: UIView) {
+        for interaction in view.interactions.compactMap({ $0 as? UIEditMenuInteraction })
+        where interaction !== branchEditMenuInteraction {
+            interaction.dismissMenu()
+        }
+        for subview in view.subviews {
+            dismissWebKitEditMenus(in: subview)
+        }
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        menuFor configuration: UIEditMenuConfiguration,
+        suggestedActions: [UIMenuElement]
+    ) -> UIMenu? {
+        guard let selection = branchSelection else { return nil }
+
+        let copyAction = UIAction(
+            title: "Copy",
+            image: UIImage(systemName: "doc.on.doc")
+        ) { _ in
+            UIPasteboard.general.string = selection.copyText
+        }
+        let branchAction = UIAction(
             title: "Branch from Selection",
             image: UIImage(systemName: "arrow.triangle.branch"),
             identifier: branchSelectionActionIdentifier
         ) { [weak self] _ in
-            guard let self, let branchSelection = self.branchSelection else { return }
-            self.onBranchFromSelection?(branchSelection)
+            self?.branchFromCurrentSelection()
         }
-        let copyAction = #selector(UIResponderStandardEditActions.copy(_:))
 
-        if #available(iOS 26.0, *) {
-            if builder.command(for: copyAction, propertyList: nil) != nil {
-                builder.insertElements([action], afterCommand: copyAction, propertyList: nil)
-            } else if builder.menu(for: .edit) != nil {
-                builder.insertElements([action], atStartOfMenu: .edit)
-            }
-        } else if builder.menu(for: .edit) != nil {
-            let branchGroup = UIMenu(title: "", options: .displayInline, children: [action])
-            builder.insertChild(branchGroup, atStartOfMenu: .edit)
-        }
+        return UIMenu(
+            title: "",
+            options: .displayInline,
+            children: [branchAction, copyAction]
+        )
     }
 
-    func updateBranchSelection(_ selection: NativeBranchSelection?) {
-        guard branchSelection != selection else { return }
-        branchSelection = selection
-        UIMenuSystem.context.setNeedsRebuild()
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        targetRectFor configuration: UIEditMenuConfiguration
+    ) -> CGRect {
+        guard let rect = branchSelection?.rect else { return .null }
+        return rect.insetBy(dx: -2, dy: -2).intersection(webView.bounds)
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        willPresentMenuFor configuration: UIEditMenuConfiguration,
+        animator: any UIEditMenuInteractionAnimating
+    ) {
+        branchMenuIsPresented = true
+    }
+
+    func editMenuInteraction(
+        _ interaction: UIEditMenuInteraction,
+        willDismissMenuFor configuration: UIEditMenuConfiguration,
+        animator: any UIEditMenuInteractionAnimating
+    ) {
+        animator.addCompletion { [weak self] in
+            guard let self else { return }
+            self.branchMenuIsPresented = false
+            self.branchMenuRequested = false
+            self.branchSelection = nil
+            if self.branchEditMenuInteraction.view != nil {
+                self.webView.removeInteraction(self.branchEditMenuInteraction)
+            }
+        }
     }
 
 }
@@ -169,12 +282,21 @@ struct WebAppView: UIViewControllerRepresentable {
                         : selected.focusNode?.parentElement;
                       const anchorResponse = anchorElement?.closest('.markdown-body[data-node-id]');
                       const focusResponse = focusElement?.closest('.markdown-body[data-node-id]');
-                      const quote = selected.toString().trim().replace(/\s+/g, ' ');
+                      const copyText = selected.toString();
+                      const quote = copyText.trim().replace(/\s+/g, ' ');
 
                       if (anchorResponse && anchorResponse === focusResponse && quote) {
+                        const rect = selected.getRangeAt(0).getBoundingClientRect();
                         payload = {
                           nodeId: anchorResponse.dataset.nodeId || '',
                           quote: quote.slice(0, 480),
+                          copyText: copyText.slice(0, 20000),
+                          rect: {
+                            x: rect.x,
+                            y: rect.y,
+                            width: rect.width,
+                            height: rect.height,
+                          },
                         };
                       }
                     }
@@ -283,7 +405,13 @@ struct WebAppView: UIViewControllerRepresentable {
 
             guard let payload = message.body as? [String: Any],
                   let rawNodeId = payload["nodeId"] as? String,
-                  let rawQuote = payload["quote"] as? String else {
+                  let rawQuote = payload["quote"] as? String,
+                  let rawCopyText = payload["copyText"] as? String,
+                  let rawRect = payload["rect"] as? [String: Any],
+                  let rectX = rawRect["x"] as? NSNumber,
+                  let rectY = rawRect["y"] as? NSNumber,
+                  let rectWidth = rawRect["width"] as? NSNumber,
+                  let rectHeight = rawRect["height"] as? NSNumber else {
                 if !editMenuIsPresented {
                     webViewController?.updateBranchSelection(nil)
                 }
@@ -300,7 +428,17 @@ struct WebAppView: UIViewControllerRepresentable {
             }
 
             webViewController?.updateBranchSelection(
-                NativeBranchSelection(nodeId: nodeId, quote: String(quote.prefix(480)))
+                NativeBranchSelection(
+                    nodeId: nodeId,
+                    quote: String(quote.prefix(480)),
+                    copyText: String(rawCopyText.prefix(20_000)),
+                    rect: CGRect(
+                        x: rectX.doubleValue,
+                        y: rectY.doubleValue,
+                        width: rectWidth.doubleValue,
+                        height: rectHeight.doubleValue
+                    )
+                )
             )
         }
 
@@ -309,7 +447,7 @@ struct WebAppView: UIViewControllerRepresentable {
             willPresentEditMenuWithAnimator animator: any UIEditMenuInteractionAnimating
         ) {
             editMenuIsPresented = true
-            UIMenuSystem.context.setNeedsRebuild()
+            webViewController?.requestBranchMenu()
         }
 
         func webView(
@@ -317,7 +455,7 @@ struct WebAppView: UIViewControllerRepresentable {
             willDismissEditMenuWithAnimator animator: any UIEditMenuInteractionAnimating
         ) {
             editMenuIsPresented = false
-            webViewController?.updateBranchSelection(nil)
+            webViewController?.systemEditMenuDidDismiss()
         }
 
         func webView(

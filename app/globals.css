@@ -2667,7 +2667,30 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .main-panel {
   position: relative;
-  grid-template-rows: minmax(0, 1fr) auto;
+  --composer-overlay-height: 86px;
+  grid-template-rows: minmax(0, 1fr);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .main-panel::before,
+:root[data-rabbit-hole-platform="ipad"] .main-panel::after {
+  content: "";
+  position: absolute;
+  right: 0;
+  left: 0;
+  z-index: 6;
+  pointer-events: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .main-panel::before {
+  top: 0;
+  height: 54px;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--panel) 88%, transparent), transparent);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .main-panel::after {
+  bottom: 0;
+  height: 72px;
+  background: linear-gradient(to top, color-mix(in srgb, var(--panel) 86%, transparent), transparent);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .main-header {
@@ -2709,7 +2732,8 @@ button:disabled {
   pointer-events: auto;
 }
 
-:root[data-rabbit-hole-platform="ipad"] .ipad-more-button {
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-button,
+:root[data-rabbit-hole-platform="ipad"] .sidebar-show-button {
   color: var(--ink-soft);
   background: var(--panel);
   border: 1px solid var(--line);
@@ -2819,7 +2843,7 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .conversation-path {
   width: min(100%, 930px);
-  padding: 24px 38px 42px;
+  padding: 24px 38px calc(var(--composer-overlay-height) + 28px);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .conversation-path > .turn:first-child > .user-message {
@@ -2902,6 +2926,8 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .new-chat-state {
   width: min(100%, 680px);
+  box-sizing: border-box;
+  padding-bottom: var(--composer-overlay-height);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .new-chat-state h1 {
@@ -2909,54 +2935,67 @@ button:disabled {
 }
 
 :root[data-rabbit-hole-platform="ipad"] .composer-dock {
-  padding: 13px 24px 18px;
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  z-index: 8;
+  padding: 6px 14px 9px;
+  pointer-events: none;
+  background: transparent;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .composer {
   width: min(100%, 930px);
-  gap: 10px;
-  padding: 13px 15px 11px 17px;
-  border-radius: 18px;
+  gap: 5px;
+  padding: 6px 8px 6px 10px;
+  pointer-events: auto;
+  border-radius: 13px;
+  box-shadow: 0 10px 34px rgba(21, 29, 23, 0.13), 0 2px 8px rgba(21, 29, 23, 0.06);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer:focus-within {
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 9%, transparent), var(--shadow-soft);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .composer-context {
-  gap: 11px;
-  padding: 9px 10px;
-  border-radius: 10px;
-  font-size: 14px;
+  gap: 8px;
+  padding: 7px 8px;
+  border-radius: 8px;
+  font-size: 13.5px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .composer-context > button {
-  width: 34px;
-  height: 34px;
+  width: 30px;
+  height: 30px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .inference-controls {
-  gap: 8px 12px;
-  padding: 8px 10px;
+  gap: 6px 10px;
+  padding: 6px 8px;
   font-size: 12.5px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .inference-controls select {
-  height: 36px;
+  height: 34px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .composer-input-row {
-  gap: 11px;
+  gap: 8px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .composer textarea {
-  min-height: 68px;
+  min-height: 42px;
   max-height: 200px;
-  padding: 16px 6px 10px;
+  padding: 6px 4px 4px;
   font-size: 18px;
-  line-height: 1.5;
+  line-height: 1.45;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .send-button {
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .send-button svg {
@@ -3086,6 +3125,11 @@ button:disabled {
 :root[data-rabbit-hole-platform="ipad"] .ipad-more-button.is-active:hover {
   color: var(--ink);
   background: var(--paper-warm);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sidebar-show-button:hover {
+  color: var(--ink-soft);
+  background: var(--panel);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .new-chat-button:hover {

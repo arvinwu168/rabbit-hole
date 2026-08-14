@@ -971,6 +971,7 @@ export function RabbitHoleApp() {
   const [ipadMoreMenuOpen, setIpadMoreMenuOpen] = useState(false);
   const [colorTheme, setColorTheme] = useState<ColorTheme>("light");
   const composerRef = useRef<HTMLTextAreaElement>(null);
+  const composerDockRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const followStreamRef = useRef(true);
   const lastViewedNodeIdRef = useRef<string | null>(null);
@@ -1319,6 +1320,26 @@ export function RabbitHoleApp() {
     composer.style.height = `${Math.min(composer.scrollHeight, 200)}px`;
     composer.style.overflowY = composer.scrollHeight > 200 ? "auto" : "hidden";
   }, [composerValue]);
+
+  useLayoutEffect(() => {
+    if (document.documentElement.dataset.rabbitHolePlatform !== "ipad") return;
+
+    const composerDock = composerDockRef.current;
+    const mainPanel = composerDock?.parentElement;
+    if (!composerDock || !mainPanel) return;
+
+    const updateComposerHeight = () => {
+      mainPanel.style.setProperty("--composer-overlay-height", `${composerDock.offsetHeight}px`);
+    };
+    updateComposerHeight();
+
+    const observer = new ResizeObserver(updateComposerHeight);
+    observer.observe(composerDock);
+    return () => {
+      observer.disconnect();
+      mainPanel.style.removeProperty("--composer-overlay-height");
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const scrollElement = scrollRef.current;
@@ -2301,7 +2322,7 @@ export function RabbitHoleApp() {
           )}
         </div>
 
-        <div className="composer-dock">
+        <div className="composer-dock" ref={composerDockRef}>
           <form className="composer" onSubmit={submitPrompt}>
             {branchContext && branchParent ? (
               <div className="composer-context">
