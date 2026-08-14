@@ -55,11 +55,10 @@ private struct FailureView: View {
             Color(uiColor: .systemBackground)
 
             VStack(spacing: 16) {
-                Image(systemName: "hare.fill")
-                    .font(.system(size: 23, weight: .semibold))
-                    .foregroundStyle(Color(uiColor: .label))
+                Image("RabbitHoleMark")
+                    .resizable()
+                    .interpolation(.high)
                     .frame(width: 52, height: 52)
-                    .background(Color(uiColor: .secondarySystemBackground))
                     .clipShape(RoundedRectangle(cornerRadius: 15, style: .continuous))
 
                 VStack(spacing: 7) {

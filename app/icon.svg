@@ -2,19 +2,13 @@
   <style>
     .start { stop-color: #73777b; }
     .end { stop-color: #414448; }
-    .rabbit-fill { fill: #fff; }
-    .rabbit-stroke { stroke: #fff; }
-    .feature { fill: #414448; }
-    .detail-fill { fill: #c8cbcd; }
-    .detail-stroke { stroke: #c8cbcd; }
+    .rabbit { stroke: #fff; }
+    .detail { fill: #c8cbcd; }
     @media (prefers-color-scheme: dark) {
       .start { stop-color: #d9dcde; }
       .end { stop-color: #9ca1a5; }
-      .rabbit-fill { fill: #202224; }
-      .rabbit-stroke { stroke: #202224; }
-      .feature { fill: #d9dcde; }
-      .detail-fill { fill: #656a6e; }
-      .detail-stroke { stroke: #656a6e; }
+      .rabbit { stroke: #202224; }
+      .detail { fill: #656a6e; }
     }
   </style>
   <defs>
@@ -24,11 +18,13 @@
     </linearGradient>
   </defs>
   <rect width="64" height="64" rx="18" fill="url(#graphite)"/>
-  <circle class="detail-fill" cx="49" cy="14" r="4"/>
-  <ellipse cx="32" cy="50" rx="20" ry="7" fill="#17191b" fill-opacity="0.58"/>
-  <path class="rabbit-stroke" d="M24 29C20 20 21 10 25 9c4-1 6 10 7 17M40 29c4-9 3-19-1-20-4-1-6 10-7 17" fill="none" stroke-width="5" stroke-linecap="round"/>
-  <path class="rabbit-fill" d="M19 37c0-8 5-13 13-13s13 5 13 13c0 7-5 12-13 12s-13-5-13-12Z"/>
-  <circle class="feature" cx="27" cy="35" r="1.7"/>
-  <circle class="feature" cx="37" cy="35" r="1.7"/>
-  <path class="detail-stroke" d="m30 40 2 1.6 2-1.6" fill="none" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle class="detail" cx="49" cy="14" r="4"/>
+  <ellipse cx="32" cy="51" rx="20" ry="6" fill="#17191b" fill-opacity="0.58"/>
+  <g class="rabbit" transform="translate(8 6) scale(2)" fill="none" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M13 16a3 3 0 0 1 2.24 5"/>
+    <path d="M18 12h.01"/>
+    <path d="M18 21h-8a4 4 0 0 1-4-4 7 7 0 0 1 7-7h.2L9.6 6.4a1 1 0 1 1 2.8-2.8L15.8 7h.2c3.3 0 6 2.7 6 6v1a2 2 0 0 1-2 2h-1a3 3 0 0 0-3 3"/>
+    <path d="M20 8.54V4a2 2 0 1 0-4 0v3"/>
+    <path d="M7.612 12.524a3 3 0 1 0-1.6 4.3"/>
+  </g>
 </svg>

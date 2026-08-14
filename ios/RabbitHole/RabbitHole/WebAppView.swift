@@ -75,6 +75,13 @@ struct WebAppView: UIViewRepresentable {
         configuration.websiteDataStore = .default()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
         configuration.preferences.javaScriptCanOpenWindowsAutomatically = true
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: #"document.documentElement.dataset.rabbitHolePlatform = "ipad";"#,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
         webView.navigationDelegate = context.coordinator
@@ -83,6 +90,10 @@ struct WebAppView: UIViewRepresentable {
         webView.allowsLinkPreview = true
         webView.scrollView.contentInsetAdjustmentBehavior = .never
         webView.scrollView.keyboardDismissMode = .interactive
+        webView.scrollView.bounces = false
+        webView.scrollView.alwaysBounceHorizontal = false
+        webView.scrollView.alwaysBounceVertical = false
+        webView.scrollView.isDirectionalLockEnabled = true
         webView.backgroundColor = .systemBackground
         webView.isOpaque = true
 
@@ -196,6 +207,31 @@ struct WebAppView: UIViewRepresentable {
                 UIApplication.shared.open(url)
             }
             return nil
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            runJavaScriptConfirmPanelWithMessage message: String,
+            initiatedByFrame frame: WKFrameInfo,
+            completionHandler: @escaping (Bool) -> Void
+        ) {
+            guard var presenter = webView.window?.rootViewController else {
+                completionHandler(false)
+                return
+            }
+
+            while let presentedViewController = presenter.presentedViewController {
+                presenter = presentedViewController
+            }
+
+            let alert = UIAlertController(title: "Start fresh?", message: message, preferredStyle: .alert)
+            alert.addAction(UIAlertAction(title: "Cancel", style: .cancel) { _ in
+                completionHandler(false)
+            })
+            alert.addAction(UIAlertAction(title: "Start Fresh", style: .destructive) { _ in
+                completionHandler(true)
+            })
+            presenter.present(alert, animated: true)
         }
 
         private func handleNavigationFailure(_ error: Error) {

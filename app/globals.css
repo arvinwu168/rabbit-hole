@@ -2521,6 +2521,518 @@ button:disabled {
   }
 }
 
+/* Native iPad shell: roomier type and touch targets without changing the desktop site. */
+:root[data-rabbit-hole-platform="ipad"] {
+  --sidebar-width: 320px;
+  overscroll-behavior: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] body {
+  font-size: 17.5px;
+  overscroll-behavior: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .app-shell.sidebar-collapsed .sidebar {
+  display: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-nav,
+:root[data-rabbit-hole-platform="ipad"] .conversation-scroll {
+  overscroll-behavior: contain;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sidebar-topbar {
+  min-height: 72px;
+  padding: 14px 15px 11px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .brand-lockup {
+  gap: 11px;
+  font-size: 18.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .brand-mark {
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .brand-mark svg {
+  width: 21px;
+  height: 21px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .brand-mark::after {
+  bottom: 4px;
+  width: 22px;
+  height: 6px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .brand-mark::before {
+  top: 6px;
+  right: 6px;
+  width: 5px;
+  height: 5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .icon-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 11px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .icon-button > svg {
+  width: 22px;
+  height: 22px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sidebar-show-mark {
+  display: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sidebar-show-icon,
+:root[data-rabbit-hole-platform="ipad"] .sidebar-show-button:hover .sidebar-show-icon,
+:root[data-rabbit-hole-platform="ipad"] .sidebar-show-button:focus-visible .sidebar-show-icon {
+  opacity: 1;
+  transform: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .new-chat-button {
+  min-height: 64px;
+  gap: 14px;
+  padding-inline: 18px;
+  font-size: 17.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .new-chat-button svg {
+  width: 24px;
+  height: 24px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sidebar-heading {
+  padding: 10px 19px 9px;
+  font-size: 13.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sidebar-count {
+  min-width: 23px;
+  padding: 2px 7px;
+  font-size: 12.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-nav {
+  padding-inline: 11px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-disclosure {
+  width: 28px;
+  height: 40px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-select {
+  gap: 9px;
+  padding-block: 9px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-node-icon {
+  width: 20px;
+  height: 20px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-label {
+  font-size: 15.5px;
+  line-height: 20px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-quote {
+  max-width: 210px;
+  font-size: 13px;
+  line-height: 17px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .empty-chat-list,
+:root[data-rabbit-hole-platform="ipad"] .sidebar-footer {
+  font-size: 13.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sidebar-footer {
+  min-height: 56px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .main-panel {
+  grid-template-rows: 72px minmax(0, 1fr) auto;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .main-header {
+  gap: 18px;
+  padding-inline: 15px 22px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .breadcrumb {
+  font-size: 15px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .guest-badge,
+:root[data-rabbit-hole-platform="ipad"] .inference-badge {
+  padding: 7px 10px;
+  font-size: 13px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sign-in-button {
+  min-height: 42px;
+  padding-inline: 13px;
+  font-size: 13.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .conversation-path {
+  width: min(100%, 930px);
+  padding: 48px 38px 42px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .anchor-context {
+  max-width: min(82%, 650px);
+  font-size: 14px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .user-bubble {
+  max-width: min(82%, 700px);
+  padding: 14px 18px;
+  border-radius: 18px 18px 5px 18px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .user-prompt-toggle,
+:root[data-rabbit-hole-platform="ipad"] .user-message-actions button,
+:root[data-rabbit-hole-platform="ipad"] .message-actions button,
+:root[data-rabbit-hole-platform="ipad"] .raw-branch-shortcut {
+  min-height: 32px;
+  font-size: 13px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .response-provider-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .response-provider-name {
+  font-size: 15.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .model-name,
+:root[data-rabbit-hole-platform="ipad"] .message-status {
+  font-size: 13px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .latency-summary,
+:root[data-rabbit-hole-platform="ipad"] .relay-trace-details {
+  font-size: 12px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .markdown-body {
+  font-size: 18px;
+  line-height: 1.68;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .markdown-body h1 {
+  font-size: 27px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .markdown-body h2 {
+  font-size: 21px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .markdown-body h3,
+:root[data-rabbit-hole-platform="ipad"] .markdown-body h4 {
+  font-size: 18.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .markdown-body pre code,
+:root[data-rabbit-hole-platform="ipad"] .markdown-table-scroll table {
+  font-size: 15.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .branch-chip,
+:root[data-rabbit-hole-platform="ipad"] .branch-more-button,
+:root[data-rabbit-hole-platform="ipad"] .branch-menu-label {
+  min-height: 34px;
+  padding-inline: 10px;
+  font-size: 13px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .branch-menu-prompt {
+  font-size: 12.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .new-chat-state {
+  width: min(100%, 680px);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .new-chat-state h1 {
+  font-size: clamp(30px, 3vw, 42px);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer-dock {
+  padding: 13px 24px 18px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer {
+  width: min(100%, 930px);
+  gap: 10px;
+  padding: 13px 15px 11px 17px;
+  border-radius: 18px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer-context {
+  gap: 11px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer-context > button {
+  width: 34px;
+  height: 34px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .inference-controls {
+  gap: 8px 12px;
+  padding: 8px 10px;
+  font-size: 12.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .inference-controls select {
+  height: 36px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer-input-row {
+  gap: 11px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer textarea {
+  min-height: 68px;
+  max-height: 200px;
+  padding: 16px 6px 10px;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .send-button {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .send-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer-meta {
+  min-height: 0;
+  justify-content: flex-end;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer-meta > span,
+:root[data-rabbit-hole-platform="ipad"] .composer-meta:not(:has(button)) {
+  display: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .access-card {
+  width: min(100%, 480px);
+  padding: 52px 48px 44px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .access-mark {
+  width: 64px;
+  height: 64px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .access-eyebrow,
+:root[data-rabbit-hole-platform="ipad"] .access-form label,
+:root[data-rabbit-hole-platform="ipad"] .access-error {
+  font-size: 14px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .access-card h1 {
+  font-size: 38px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .access-copy {
+  max-width: 380px;
+  font-size: 16px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .access-form input,
+:root[data-rabbit-hole-platform="ipad"] .access-form button {
+  min-height: 55px;
+  font-size: 17px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .auth-dialog {
+  width: min(100%, 520px);
+  padding: 40px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .auth-mark {
+  width: 53px;
+  height: 53px;
+  border-radius: 15px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .auth-dialog h2 {
+  margin-top: 21px;
+  font-size: 29px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .auth-intro {
+  font-size: 16.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .guest-session-card {
+  gap: 13px;
+  padding: 15px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .guest-session-card strong,
+:root[data-rabbit-hole-platform="ipad"] .auth-provider-button,
+:root[data-rabbit-hole-platform="ipad"] .continue-guest-button {
+  font-size: 15px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .guest-session-card small,
+:root[data-rabbit-hole-platform="ipad"] .auth-footnote {
+  font-size: 13px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .guest-session-icon {
+  width: 39px;
+  height: 39px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .auth-provider-button {
+  min-height: 55px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .continue-guest-button {
+  min-height: 48px;
+}
+
+/* iPadOS keeps :hover after a tap; restore resting styles and let active state be explicit. */
+:root[data-rabbit-hole-platform="ipad"] .access-form button:hover:not(:disabled) {
+  filter: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .icon-button:hover {
+  color: var(--ink-soft);
+  background: transparent;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .model-controls-toggle.is-active,
+:root[data-rabbit-hole-platform="ipad"] .dev-mode-toggle.is-active {
+  color: var(--accent);
+  background: var(--accent-faint);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .new-chat-button:hover {
+  color: var(--ink-soft);
+  background: transparent;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-row:hover {
+  background: transparent;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-row.is-active,
+:root[data-rabbit-hole-platform="ipad"] .tree-row.is-active:hover {
+  background: var(--accent-soft);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-disclosure:hover:not(:disabled) {
+  color: var(--ink-faint);
+  background: transparent;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sign-in-button:hover {
+  background: var(--accent);
+  transform: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .user-prompt-toggle:hover {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .user-message-actions button:hover,
+:root[data-rabbit-hole-platform="ipad"] .message-actions button:hover,
+:root[data-rabbit-hole-platform="ipad"] .raw-branch-shortcut:hover,
+:root[data-rabbit-hole-platform="ipad"] .response-source-link:hover {
+  color: var(--ink-faint);
+  background: transparent;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .cancel-generation-button:hover {
+  background: transparent;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .branch-chip:hover,
+:root[data-rabbit-hole-platform="ipad"] .branch-more-button:hover {
+  color: var(--ink-soft);
+  background: var(--paper-warm);
+  border-color: var(--line);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .branch-chip.is-active,
+:root[data-rabbit-hole-platform="ipad"] .branch-chip.is-active:hover {
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--accent-soft));
+}
+
+:root[data-rabbit-hole-platform="ipad"] .branch-menu-item:hover {
+  color: var(--ink-soft);
+  background: transparent;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .branch-menu-item.is-active,
+:root[data-rabbit-hole-platform="ipad"] .branch-menu-item.is-active:hover {
+  color: var(--accent-strong);
+  background: var(--accent-faint);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer-context > button:hover,
+:root[data-rabbit-hole-platform="ipad"] .relay-status-actions button:hover {
+  color: var(--ink-faint);
+  background: transparent;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .command-option:hover {
+  background: transparent;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .command-option.is-selected,
+:root[data-rabbit-hole-platform="ipad"] .command-option.is-selected:hover {
+  background: var(--accent-faint);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .relay-status-actions .relay-override-button:hover:not(:disabled) {
+  color: var(--warning);
+  background: var(--panel);
+  border-color: var(--relay-rate-line);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .send-button:hover:not(:disabled) {
+  background: var(--accent);
+  transform: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .send-button.is-stop:hover {
+  background: var(--ink-soft);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .continue-guest-button:hover {
+  background: transparent;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

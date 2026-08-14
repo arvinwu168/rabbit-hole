@@ -14,31 +14,23 @@ The iPad target is a native SwiftUI application that hosts the existing Rabbit H
 
 ## Run in the iPad Simulator
 
-The Debug configuration points to `http://localhost:3000`.
+The checked-in Debug and Release configurations point to the public Rabbit Hole deployment at `https://rabbit-hole-mu.vercel.app`.
 
 1. Install the full Xcode application. Command Line Tools alone do not include the iPad Simulator or iOS SDK.
-2. Start Rabbit Hole from the repository root:
+2. Open `ios/RabbitHole/RabbitHole.xcodeproj` in Xcode.
+3. Select the **RabbitHole** scheme and an iPad simulator or physical iPad, then Run.
 
-   ```bash
-   npm run dev
-   ```
-
-   Use `npm run dev:no-auth` if you intentionally want to skip the password gate locally.
-
-3. Open `ios/RabbitHole/RabbitHole.xcodeproj` in Xcode.
-4. Select the **RabbitHole** scheme and an iPad simulator, then Run.
-
-The simulator shares the Mac's localhost network, so it can reach the Next development server and the optional desktop ChatGPT relay.
+To test against a local Next development server instead, temporarily change the Debug `RABBIT_HOLE_BASE_URL` build setting to `http://localhost:3000` for the simulator. The simulator shares the Mac's localhost network, so it can also reach the optional desktop ChatGPT relay.
 
 ## Point Release builds at Vercel
 
-Set `RABBIT_HOLE_BASE_URL` under **RabbitHole target → Build Settings → User-Defined** to the canonical HTTPS deployment, for example:
+`RABBIT_HOLE_BASE_URL` under **RabbitHole target → Build Settings → User-Defined** is currently set to:
 
 ```text
-https://rabbit-hole-your-team.vercel.app
+https://rabbit-hole-mu.vercel.app
 ```
 
-The Release configuration deliberately contains a recognizable placeholder and shows a configuration error until it is replaced. The URL is public configuration, not a secret. Keep `RABBIT_HOLE_PASSWORD`, `RABBIT_HOLE_AUTH_SECRET`, and every provider API key only in Vercel/server environment variables.
+The URL is public configuration, not a secret. Keep `RABBIT_HOLE_PASSWORD`, `RABBIT_HOLE_AUTH_SECRET`, and every provider API key only in Vercel/server environment variables.
 
 For a one-off Xcode run, the scheme can override the build value with a `RABBIT_HOLE_BASE_URL` launch environment variable.
 
