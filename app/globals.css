@@ -2539,22 +2539,27 @@ button:disabled {
 
 /* Native iPad shell: roomier type and touch targets without changing the desktop site. */
 :root[data-rabbit-hole-platform="ipad"] {
-  --sidebar-width: 220px;
+  --sidebar-width: 264px;
+  height: 100%;
+  overflow: hidden;
+  overscroll-behavior: none;
 }
 
 :root[data-rabbit-hole-platform="ipad"] body {
-  min-height: 100dvh;
-  overflow-x: hidden;
+  height: 100dvh;
+  min-height: 0;
+  overflow: hidden;
+  overscroll-behavior: none;
   font-size: 17px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .app-shell {
   --ipad-main-left: var(--sidebar-width);
-  height: auto;
-  min-height: 100dvh;
+  height: 100dvh;
+  min-height: 0;
   display: block;
   padding-left: var(--ipad-main-left);
-  overflow: visible;
+  overflow: hidden;
   transition: padding-left 180ms ease;
 }
 
@@ -2580,9 +2585,12 @@ button:disabled {
 }
 
 :root[data-rabbit-hole-platform="ipad"] .conversation-scroll {
-  min-height: 100dvh;
-  overflow: visible;
-  touch-action: auto;
+  height: 100dvh;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  touch-action: pan-y;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .sidebar-topbar {
@@ -2733,10 +2741,10 @@ button:disabled {
 :root[data-rabbit-hole-platform="ipad"] .main-panel {
   position: static;
   --composer-overlay-height: 86px;
-  height: auto;
-  min-height: 100dvh;
+  height: 100dvh;
+  min-height: 0;
   display: block;
-  overflow: visible;
+  overflow: hidden;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .main-panel::before,

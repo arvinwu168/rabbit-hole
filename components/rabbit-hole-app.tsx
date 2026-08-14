@@ -861,10 +861,6 @@ function getBranchLabel(branch: TurnNode, siblings: TurnNode[], quoteAnchor = tr
 }
 
 function getConversationScroller(fallback: HTMLDivElement | null) {
-  if (document.documentElement.dataset.rabbitHolePlatform === "ipad") {
-    return document.scrollingElement as HTMLElement | null;
-  }
-
   return fallback;
 }
 
@@ -1475,17 +1471,14 @@ export function RabbitHoleApp() {
         scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
       followStreamRef.current = distanceFromBottom <= 80;
     };
-    const isIpad = document.documentElement.dataset.rabbitHolePlatform === "ipad";
     const scrollElement = getConversationScroller(scrollRef.current);
     document.addEventListener("pointerdown", closeFloatingControls);
     window.addEventListener("resize", handleScroll);
-    if (isIpad) window.addEventListener("scroll", handleScroll);
-    else scrollElement?.addEventListener("scroll", handleScroll);
+    scrollElement?.addEventListener("scroll", handleScroll);
     return () => {
       document.removeEventListener("pointerdown", closeFloatingControls);
       window.removeEventListener("resize", handleScroll);
-      if (isIpad) window.removeEventListener("scroll", handleScroll);
-      else scrollElement?.removeEventListener("scroll", handleScroll);
+      scrollElement?.removeEventListener("scroll", handleScroll);
     };
   }, []);
 
