@@ -2533,7 +2533,9 @@ button:disabled {
 }
 
 :root[data-rabbit-hole-platform="ipad"] .app-shell.sidebar-collapsed .sidebar {
-  display: none;
+  width: 0;
+  min-width: 0;
+  border-right: 0;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .tree-nav,
