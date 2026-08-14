@@ -119,7 +119,7 @@ export const INFERENCE_OPTION_GROUPS: ReadonlyArray<{
     optionIds: ["groq-direct-gpt-oss-120b", "chatgpt-relay"],
   },
   {
-    label: "Development",
+    label: "Experiment",
     optionIds: ["mock"],
   },
 ];

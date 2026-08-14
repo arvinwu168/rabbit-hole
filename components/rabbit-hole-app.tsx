@@ -86,6 +86,7 @@ import {
   resolveColorTheme,
   type ColorTheme,
 } from "@/lib/theme";
+import { isExperimentModeAvailable } from "@/lib/experiment-mode";
 
 const LEGACY_WORKSPACE_STORAGE_KEY = "rabbit-hole-workspace-v1";
 const GUEST_WORKSPACE_STORAGE_KEY = "rabbit-hole-guest-workspace-v1";
@@ -98,7 +99,7 @@ const MODEL_CONTROLS_STORAGE_KEY = "rabbit-hole-model-controls-visible";
 const DEV_MODE_STORAGE_KEY = "rabbit-hole-dev-mode";
 const RELAY_TOKEN_STORAGE_KEY = "rabbit-hole-chatgpt-relay-token";
 const CHATGPT_RELAY_URL = "http://127.0.0.1:43119";
-const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
+const EXPERIMENT_MODE_AVAILABLE = isExperimentModeAvailable();
 
 type LoopbackRequestInit = RequestInit & {
   targetAddressSpace?: "loopback";
@@ -192,7 +193,7 @@ const ROOT_COMMANDS: ComposerCommandOption[] = [
   {
     id: "fixture-help",
     command: "/help",
-    label: "Developer command help",
+    label: "Experiment command help",
     description: "Return the current commands and fixture rules as a local help response.",
     action: "show-help",
   },
@@ -256,7 +257,7 @@ function developerHelpResponse(): string {
   );
 
   return [
-    "# Developer commands",
+    "# Experiment commands",
     "",
     "Type `/` to open the command palette. Use ↑/↓ to select, Enter to run, and Esc to close it.",
     "",
@@ -990,7 +991,7 @@ export function RabbitHoleApp() {
       ? `Mock · ${pendingFixture.label}`
       : inferenceLabel(inferenceOptionId, selectedOutputTokenSetting);
   const isCommandInput =
-    IS_DEVELOPMENT && devMode && composerValue.trimStart().startsWith("/");
+    EXPERIMENT_MODE_AVAILABLE && devMode && composerValue.trimStart().startsWith("/");
   const commandOptions = useMemo(
     () => (isCommandInput && !commandPaletteDismissed ? composerCommandOptions(composerValue) : []),
     [commandPaletteDismissed, composerValue, isCommandInput],
@@ -1148,7 +1149,7 @@ export function RabbitHoleApp() {
       if (savedModelControlsVisibility !== null) {
         restoredModelControlsVisibility = savedModelControlsVisibility === "true";
       }
-      if (IS_DEVELOPMENT) {
+      if (EXPERIMENT_MODE_AVAILABLE) {
         restoredDevMode = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "true";
       }
       restoredRelayToken = window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) ?? "";
@@ -1164,7 +1165,7 @@ export function RabbitHoleApp() {
       if (restoredModelControlsVisibility !== null) {
         setModelControlsVisible(restoredModelControlsVisibility);
       }
-      if (IS_DEVELOPMENT) setDevMode(restoredDevMode);
+      if (EXPERIMENT_MODE_AVAILABLE) setDevMode(restoredDevMode);
       if (restoredRelayToken) {
         setRelayToken(restoredRelayToken);
         setRelayPaired(true);
@@ -1192,7 +1193,7 @@ export function RabbitHoleApp() {
   }, [modelControlsVisible, hydrated]);
 
   useEffect(() => {
-    if (!hydrated || !IS_DEVELOPMENT) return;
+    if (!hydrated || !EXPERIMENT_MODE_AVAILABLE) return;
     window.localStorage.setItem(DEV_MODE_STORAGE_KEY, String(devMode));
   }, [devMode, hydrated]);
 
@@ -1407,7 +1408,7 @@ export function RabbitHoleApp() {
                 messages,
                 anchor,
                 inference: inferenceOptionId,
-                devMode: IS_DEVELOPMENT && devMode,
+                devMode: EXPERIMENT_MODE_AVAILABLE && devMode,
                 ...(effectiveMaxTokens ? { maxTokens: effectiveMaxTokens } : {}),
                 ...(fixtureId ? { fixtureId } : {}),
           },
@@ -1858,10 +1859,10 @@ export function RabbitHoleApp() {
           )}
         </nav>
 
-        {IS_DEVELOPMENT && devMode ? (
+        {EXPERIMENT_MODE_AVAILABLE && devMode ? (
           <div className="sidebar-footer">
             <span className="provider-dot" />
-            <span>Development mode</span>
+            <span>Experiment mode</span>
             <span className="provider-name">Tools on</span>
           </div>
         ) : null}
@@ -1916,7 +1917,7 @@ export function RabbitHoleApp() {
             >
               <SlidersHorizontal size={16} />
             </button>
-            {IS_DEVELOPMENT ? (
+            {EXPERIMENT_MODE_AVAILABLE ? (
               <button
                 type="button"
                 className={`icon-button dev-mode-toggle ${devMode ? "is-active" : ""}`}
@@ -1931,9 +1932,9 @@ export function RabbitHoleApp() {
                     if (composerValue.trimStart().startsWith("/")) setComposerValue("");
                   }
                 }}
-                aria-label={`${devMode ? "Disable" : "Enable"} development mode`}
+                aria-label={`${devMode ? "Disable" : "Enable"} experiment mode`}
                 aria-pressed={devMode}
-                title={`${devMode ? "Disable" : "Enable"} development mode`}
+                title={`${devMode ? "Disable" : "Enable"} experiment mode`}
               >
                 <FlaskConical size={16} />
               </button>
@@ -2010,7 +2011,7 @@ export function RabbitHoleApp() {
                     <div className="assistant-message">
                       <div className="assistant-head">
                         <ProviderIdentity model={node.model} />
-                        {IS_DEVELOPMENT && devMode && node.latency ? (
+                        {EXPERIMENT_MODE_AVAILABLE && devMode && node.latency ? (
                           <LatencySummary metrics={node.latency} />
                         ) : null}
                         {node.status === "complete" && node.providerConversationUrl ? (
@@ -2036,7 +2037,7 @@ export function RabbitHoleApp() {
                         ) : null}
                       </div>
 
-                      {IS_DEVELOPMENT && devMode && node.latency ? (
+                      {EXPERIMENT_MODE_AVAILABLE && devMode && node.latency ? (
                         <RelayTraceDetails metrics={node.latency} />
                       ) : null}
 
@@ -2111,9 +2112,9 @@ export function RabbitHoleApp() {
 
             {modelControlsVisible ? (
               <div className="inference-controls" aria-label="Model settings">
-                {IS_DEVELOPMENT && devMode ? (
-                  <span className="developer-controls-label" title="Developer fixtures and workspace generators are enabled">
-                    Dev tools
+                {EXPERIMENT_MODE_AVAILABLE && devMode ? (
+                  <span className="developer-controls-label" title="Experiment fixtures and workspace generators are enabled">
+                    Experiments
                   </span>
                 ) : null}
                 <label>
@@ -2217,7 +2218,7 @@ export function RabbitHoleApp() {
                   ) : null}
                 </div>
 
-                {IS_DEVELOPMENT && devMode && relaySession ? (
+                {EXPERIMENT_MODE_AVAILABLE && devMode && relaySession ? (
                   <div className="relay-session-metrics" aria-label="Relay session diagnostics">
                     <span>{relaySession.submissions} submitted</span>
                     <span>{relaySession.requestsReceived} received</span>
@@ -2265,7 +2266,7 @@ export function RabbitHoleApp() {
               </div>
             ) : null}
 
-            {IS_DEVELOPMENT && commandPaletteVisible ? (
+            {EXPERIMENT_MODE_AVAILABLE && commandPaletteVisible ? (
               <div
                 id="composer-command-list"
                 className="command-palette"
@@ -2280,7 +2281,7 @@ export function RabbitHoleApp() {
                         ? "Demo workspaces"
                         : "Commands"}
                   </span>
-                  <span>development only</span>
+                  <span>experiment mode</span>
                 </div>
                 <div className="command-options">
                   {commandOptions.length ? (
@@ -2397,8 +2398,8 @@ export function RabbitHoleApp() {
             </div>
             <div className="composer-meta">
               <span>
-                {IS_DEVELOPMENT && devMode && !composerValue
-                  ? "Type / for developer commands"
+                {EXPERIMENT_MODE_AVAILABLE && devMode && !composerValue
+                  ? "Type / for experiment commands"
                   : newChatMode
                     ? "Creates a new tree"
                     : "Enter to send · Shift + Enter for a new line"}

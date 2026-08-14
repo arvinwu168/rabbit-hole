@@ -11,6 +11,7 @@ import {
   modelLabelForId,
   normalizeMaxOutputTokens,
 } from "../lib/inference-options.ts";
+import { resolveExperimentModeAvailability } from "../lib/experiment-mode.ts";
 
 test("the catalog exposes four Gateway models and independent backup paths", () => {
   const gatewayOptions = Object.values(INFERENCE_OPTIONS).filter(
@@ -54,4 +55,11 @@ test("catalog IDs and display labels are resolved from the shared registry", () 
   const groupedIds = INFERENCE_OPTION_GROUPS.flatMap((group) => group.optionIds);
   assert.equal(new Set(groupedIds).size, groupedIds.length);
   assert.deepEqual(new Set(groupedIds), new Set(Object.keys(INFERENCE_OPTIONS)));
+});
+
+test("experiment mode is automatic locally and explicitly gated in production", () => {
+  assert.equal(resolveExperimentModeAvailability("development", undefined), true);
+  assert.equal(resolveExperimentModeAvailability("production", "1"), true);
+  assert.equal(resolveExperimentModeAvailability("production", undefined), false);
+  assert.equal(resolveExperimentModeAvailability("production", "0"), false);
 });

@@ -16,6 +16,7 @@ import {
   type StaticMockFixtureId,
 } from "@/lib/mock-fixtures";
 import { isRequestAuthenticated } from "@/lib/auth";
+import { isExperimentModeAvailable } from "@/lib/experiment-mode";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -505,7 +506,7 @@ export async function POST(request: Request) {
   const maxTokens = inferenceOption.supportsOutputCap
     ? normalizeMaxOutputTokens(body.maxTokens)
     : undefined;
-  const fixturesEnabled = process.env.NODE_ENV !== "production" && body.devMode === true;
+  const fixturesEnabled = isExperimentModeAvailable() && body.devMode === true;
   const fixtureSelection = body.fixtureId ? getMockFixtureSelection(body.fixtureId) : undefined;
 
   if (body.fixtureId && !fixtureSelection) {
@@ -513,7 +514,7 @@ export async function POST(request: Request) {
   }
 
   if (body.fixtureId && !fixturesEnabled) {
-    return new Response("Named mock fixtures are only available in development mode.", { status: 403 });
+    return new Response("Named mock fixtures require experiment mode.", { status: 403 });
   }
 
   if (body.fixtureId && inferenceOption.transport !== "mock") {
