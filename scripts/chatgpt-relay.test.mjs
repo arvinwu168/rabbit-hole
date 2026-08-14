@@ -24,6 +24,7 @@ import {
   selectInstantModel,
   submitChatGptPrompt,
   stopActiveChatGptGeneration,
+  waitForStableComposer,
 } from "./chatgpt-relay.mjs";
 
 test("a root prompt is sent to ChatGPT without relay scaffolding", () => {
@@ -173,6 +174,29 @@ test("an ineffective send click is never reported as a submitted prompt", async 
   );
   assert.equal(clicks, 1);
   assert.equal(enterPresses, 0);
+});
+
+test("the relay waits for a continuously stable composer before preparing a prompt", async () => {
+  let checks = 0;
+  const stableComposer = {
+    isVisible: async () => {
+      checks += 1;
+      return true;
+    },
+  };
+  assert.equal(
+    await waitForStableComposer(stableComposer, { stabilityMs: 5, pollMs: 1 }),
+    true,
+  );
+  assert.ok(checks >= 1);
+
+  const unstableComposer = {
+    isVisible: async () => false,
+  };
+  assert.equal(
+    await waitForStableComposer(unstableComposer, { stabilityMs: 5, pollMs: 1 }),
+    false,
+  );
 });
 
 test("the relay targets ChatGPT Instant and recognizes the account protection warning", () => {

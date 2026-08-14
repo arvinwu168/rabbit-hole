@@ -26,6 +26,7 @@ const DEFAULT_TIMEOUT_MS = 180_000;
 const DEFAULT_MAX_CONCURRENT = 1;
 const CHATGPT_ACCOUNT_COOLDOWN_MS = 60 * 60 * 1_000;
 const RESPONSE_STABILITY_MS = 450;
+const COMPOSER_STABILITY_MS = 750;
 let relayLogPath = null;
 let relayLogWarningShown = false;
 export const CHATGPT_INSTANT_LABEL = "Instant";
@@ -101,6 +102,49 @@ function mergeTrafficMetrics(left, right) {
       .map(([route, count]) => ({ route, count }))
       .sort((first, second) => second.count - first.count || first.route.localeCompare(second.route))
       .slice(0, 12),
+  };
+}
+
+function subtractCountRecords(current = {}, baseline = {}) {
+  const difference = {};
+  for (const [key, value] of Object.entries(current)) {
+    const count = Math.max(0, value - (baseline[key] ?? 0));
+    if (count > 0) difference[key] = count;
+  }
+  return difference;
+}
+
+function subtractTrafficMetrics(current, baseline = emptyTrafficMetrics()) {
+  const baselineRoutes = new Map(
+    (baseline.topRoutes ?? []).map((item) => [item.route, item.count]),
+  );
+  return {
+    observedMs: Math.max(0, (current.observedMs ?? 0) - (baseline.observedMs ?? 0)),
+    requests: Math.max(0, (current.requests ?? 0) - (baseline.requests ?? 0)),
+    responses: Math.max(0, (current.responses ?? 0) - (baseline.responses ?? 0)),
+    failed: Math.max(0, (current.failed ?? 0) - (baseline.failed ?? 0)),
+    documentLoads: Math.max(0, (current.documentLoads ?? 0) - (baseline.documentLoads ?? 0)),
+    chatgptApiRequests: Math.max(
+      0,
+      (current.chatgptApiRequests ?? 0) - (baseline.chatgptApiRequests ?? 0),
+    ),
+    firstPartyRequests: Math.max(
+      0,
+      (current.firstPartyRequests ?? 0) - (baseline.firstPartyRequests ?? 0),
+    ),
+    status403: Math.max(0, (current.status403 ?? 0) - (baseline.status403 ?? 0)),
+    status429: Math.max(0, (current.status429 ?? 0) - (baseline.status429 ?? 0)),
+    status5xx: Math.max(0, (current.status5xx ?? 0) - (baseline.status5xx ?? 0)),
+    methods: subtractCountRecords(current.methods, baseline.methods),
+    resourceTypes: subtractCountRecords(current.resourceTypes, baseline.resourceTypes),
+    owners: subtractCountRecords(current.owners, baseline.owners),
+    statusClasses: subtractCountRecords(current.statusClasses, baseline.statusClasses),
+    topRoutes: (current.topRoutes ?? [])
+      .map((item) => ({
+        route: item.route,
+        count: Math.max(0, item.count - (baselineRoutes.get(item.route) ?? 0)),
+      }))
+      .filter((item) => item.count > 0),
   };
 }
 
@@ -947,6 +991,18 @@ export async function submitChatGptPrompt(
   throw error;
 }
 
+export async function waitForStableComposer(
+  composer,
+  { stabilityMs = COMPOSER_STABILITY_MS, pollMs = 100 } = {},
+) {
+  const startedAt = Date.now();
+  while (Date.now() - startedAt < stabilityMs) {
+    if (!(await composer.isVisible().catch(() => false))) return false;
+    await new Promise((resolve) => setTimeout(resolve, pollMs));
+  }
+  return true;
+}
+
 class ChatGptBrowser {
   constructor({
     executablePath,
@@ -970,6 +1026,7 @@ class ChatGptBrowser {
     this.prewarmedPage = null;
     this.prewarmPromise = null;
     this.prewarmEnabled = prewarmEnabled;
+    this.persistentPageEnabled = !prewarmEnabled && maxConcurrent === 1;
     this.pageCheckout = Promise.resolve();
     this.generationGate = new GenerationGate(maxConcurrent);
     this.launchGate = new GenerationGate(1);
@@ -1048,6 +1105,7 @@ class ChatGptBrowser {
     relayLog("browser.ready", {
       ...await pageDebugSummary(this.page),
       prewarmEnabled: this.prewarmEnabled,
+      pageStrategy: this.persistentPageEnabled ? "persistent" : "isolated",
       maxConcurrent: this.generationGate.maxConcurrent,
       persistedCooldownUntil: this.cooldownUntil > Date.now()
         ? new Date(this.cooldownUntil).toISOString()
@@ -1118,6 +1176,7 @@ class ChatGptBrowser {
       uptimeMs: Date.now() - this.session.startedAt,
       activePages: this.pageTrackers.size,
       prewarmEnabled: this.prewarmEnabled,
+      pageStrategy: this.persistentPageEnabled ? "persistent" : "isolated",
       maxConcurrentGenerations: this.generationGate.maxConcurrent,
       traffic,
     };
@@ -1197,6 +1256,29 @@ class ChatGptBrowser {
     }
   }
 
+  async preparePersistentPage() {
+    let page = await this.ensurePage();
+    if (!page) {
+      page = await this.createBackgroundPage("controller");
+      this.setControllerPage(page);
+    }
+    const trafficBaseline = this.pageDiagnostics(page).traffic;
+    await openFreshChat(page);
+    const composer = chatComposer(page);
+    if (!(await waitUntilVisible(composer, 8_000))) {
+      throw new Error("ChatGPT did not prepare its persistent composer for the relay.");
+    }
+    if (!(await waitForStableComposer(composer))) {
+      throw new Error("ChatGPT's composer changed while the relay was preparing it. Nothing was sent.");
+    }
+    relayLog("generation.page.ready", {
+      ...this.pageDiagnostics(page),
+      reused: true,
+      ...await pageDebugSummary(page),
+    });
+    return { page, trafficBaseline };
+  }
+
   async ensurePrewarmedPage() {
     if (this.prewarmedPage && !this.prewarmedPage.isClosed()) return this.prewarmedPage;
     if (this.prewarmPromise) return this.prewarmPromise;
@@ -1217,13 +1299,27 @@ class ChatGptBrowser {
 
   async takeFreshPage() {
     const take = async () => {
+      if (this.persistentPageEnabled) {
+        const { page, trafficBaseline } = await this.preparePersistentPage();
+        return { page, prewarmHit: false, persistentHit: true, trafficBaseline };
+      }
       if (!this.prewarmEnabled) {
-        return { page: await this.prepareFreshPage("generation"), prewarmHit: false };
+        return {
+          page: await this.prepareFreshPage("generation"),
+          prewarmHit: false,
+          persistentHit: false,
+          trafficBaseline: emptyTrafficMetrics(),
+        };
       }
       const prewarmHit = Boolean(this.prewarmedPage && !this.prewarmedPage.isClosed());
       const page = await this.ensurePrewarmedPage();
       if (this.prewarmedPage === page) this.prewarmedPage = null;
-      return { page, prewarmHit };
+      return {
+        page,
+        prewarmHit,
+        persistentHit: false,
+        trafficBaseline: emptyTrafficMetrics(),
+      };
     };
     const pending = this.pageCheckout.then(take, take);
     this.pageCheckout = pending.then(() => undefined, () => undefined);
@@ -1352,6 +1448,8 @@ class ChatGptBrowser {
     let submittedAt = 0;
     let firstSnapshotAt = 0;
     let prewarmHit = false;
+    let persistentHit = false;
+    let trafficBaseline = emptyTrafficMetrics();
     let pageId = null;
     let pageRole = "unknown";
     const setStage = (nextStage) => {
@@ -1377,12 +1475,13 @@ class ChatGptBrowser {
       acquiredAt = Date.now();
       if (!this.context) throw new Error("The browser is not running.");
       if (signal.aborted) throw cancellationError();
-      ({ page, prewarmHit } = await this.takeFreshPage());
+      ({ page, prewarmHit, persistentHit, trafficBaseline } = await this.takeFreshPage());
       ({ pageId, pageRole } = this.pageDiagnostics(page));
       relayLog("generation.page.acquired", {
         requestId,
         clientRequestId: clientContext.clientRequestId ?? null,
         prewarmHit,
+        persistentHit,
         pageId,
         pageRole,
         ...await pageDebugSummary(page),
@@ -1517,9 +1616,10 @@ class ChatGptBrowser {
             prewarmHit,
           });
           const diagnostics = this.pageDiagnostics(page);
+          const requestTraffic = subtractTrafficMetrics(diagnostics.traffic, trafficBaseline);
           const enrichedMetrics = {
             ...metrics,
-            traffic: diagnostics.traffic,
+            traffic: requestTraffic,
             trace: {
               requestId,
               clientRequestId: clientContext.clientRequestId ?? null,
@@ -1570,7 +1670,7 @@ class ChatGptBrowser {
         promptSubmitted,
         protectionWarning,
         error: rawMessage.replace(/\s+/g, " ").slice(0, 1_200),
-        traffic: this.pageDiagnostics(page).traffic,
+        traffic: subtractTrafficMetrics(this.pageDiagnostics(page).traffic, trafficBaseline),
         ...await pageDebugSummary(page),
       });
       const safeMessage = publicRelayError(error);
@@ -1588,7 +1688,9 @@ class ChatGptBrowser {
         const stopClicked = await stopActiveChatGptGeneration(page);
         relayLog("generation.cancelled", { requestId, promptSubmitted, stopClicked });
       }
-      await page?.close().catch(() => {});
+      if (page && !(persistentHit && page === this.page)) {
+        await page.close().catch(() => {});
+      }
       if (launchAcquired) this.launchGate.release();
       if (acquired) this.generationGate.release();
       await this.cleanupIdleBlankPages();
