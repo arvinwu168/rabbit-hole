@@ -1356,6 +1356,82 @@ export function RabbitHoleApp() {
     };
   }, []);
 
+  useEffect(() => {
+    if (document.documentElement.dataset.rabbitHolePlatform !== "ipad") return;
+
+    const composer = composerRef.current;
+    const composerDock = composerDockRef.current;
+    if (!composer || !composerDock) return;
+
+    const viewport = window.visualViewport;
+    let focused = false;
+    let pendingFrame = 0;
+    let blurTimer = 0;
+
+    const updateFocusedPosition = () => {
+      pendingFrame = 0;
+      if (!focused) return;
+
+      const pageTop = viewport?.pageTop ?? window.scrollY;
+      const viewportHeight = viewport?.height ?? window.innerHeight;
+      const top = Math.max(0, pageTop + viewportHeight - composerDock.offsetHeight);
+      composerDock.style.position = "absolute";
+      composerDock.style.top = `${Math.round(top)}px`;
+      composerDock.style.bottom = "auto";
+      composerDock.dataset.keyboardPositioned = "true";
+    };
+
+    const scheduleFocusedPosition = () => {
+      if (!focused) return;
+      if (pendingFrame) window.cancelAnimationFrame(pendingFrame);
+      pendingFrame = window.requestAnimationFrame(updateFocusedPosition);
+    };
+
+    const beginFocusedPositioning = () => {
+      focused = true;
+      if (blurTimer) window.clearTimeout(blurTimer);
+      updateFocusedPosition();
+    };
+
+    const endFocusedPositioning = () => {
+      focused = false;
+      if (pendingFrame) window.cancelAnimationFrame(pendingFrame);
+      pendingFrame = 0;
+      blurTimer = window.setTimeout(() => {
+        composerDock.style.removeProperty("position");
+        composerDock.style.removeProperty("top");
+        composerDock.style.removeProperty("bottom");
+        delete composerDock.dataset.keyboardPositioned;
+      }, 350);
+    };
+
+    const observer = new ResizeObserver(scheduleFocusedPosition);
+    observer.observe(composerDock);
+    composer.addEventListener("focus", beginFocusedPositioning);
+    composer.addEventListener("blur", endFocusedPositioning);
+    window.addEventListener("scroll", scheduleFocusedPosition);
+    window.addEventListener("resize", scheduleFocusedPosition);
+    viewport?.addEventListener("scroll", scheduleFocusedPosition);
+    viewport?.addEventListener("resize", scheduleFocusedPosition);
+
+    return () => {
+      focused = false;
+      observer.disconnect();
+      composer.removeEventListener("focus", beginFocusedPositioning);
+      composer.removeEventListener("blur", endFocusedPositioning);
+      window.removeEventListener("scroll", scheduleFocusedPosition);
+      window.removeEventListener("resize", scheduleFocusedPosition);
+      viewport?.removeEventListener("scroll", scheduleFocusedPosition);
+      viewport?.removeEventListener("resize", scheduleFocusedPosition);
+      if (pendingFrame) window.cancelAnimationFrame(pendingFrame);
+      if (blurTimer) window.clearTimeout(blurTimer);
+      composerDock.style.removeProperty("position");
+      composerDock.style.removeProperty("top");
+      composerDock.style.removeProperty("bottom");
+      delete composerDock.dataset.keyboardPositioned;
+    };
+  }, []);
+
   useLayoutEffect(() => {
     const scrollElement = getConversationScroller(scrollRef.current);
     if (!activeNode || !scrollElement) return;

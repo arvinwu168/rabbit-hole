@@ -2539,7 +2539,7 @@ button:disabled {
 
 /* Native iPad shell: roomier type and touch targets without changing the desktop site. */
 :root[data-rabbit-hole-platform="ipad"] {
-  --sidebar-width: 320px;
+  --sidebar-width: 176px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] body {
@@ -2563,6 +2563,7 @@ button:disabled {
 }
 
 :root[data-rabbit-hole-platform="ipad"] .sidebar {
+  width: var(--sidebar-width);
   position: fixed;
   inset: 0 auto 0 0;
   z-index: 50;
@@ -2592,6 +2593,10 @@ button:disabled {
 :root[data-rabbit-hole-platform="ipad"] .brand-lockup {
   gap: 10px;
   font-size: 17.5px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .brand-lockup > span:last-child {
+  display: none;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .brand-mark {
@@ -2668,6 +2673,14 @@ button:disabled {
   padding: 0 10px 12px;
 }
 
+:root[data-rabbit-hole-platform="ipad"] .tree-children {
+  margin-left: 12px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-children > .tree-item > .tree-row::before {
+  width: 6px;
+}
+
 :root[data-rabbit-hole-platform="ipad"] .tree-row {
   margin-block: 0;
   padding-block: 1px;
@@ -2711,6 +2724,10 @@ button:disabled {
 :root[data-rabbit-hole-platform="ipad"] .sidebar-footer {
   min-height: 48px;
   padding-block: 9px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sidebar-footer .provider-name {
+  display: none;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .main-panel {
@@ -2894,7 +2911,7 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .conversation-path {
   width: min(100%, 930px);
-  padding: 16px 34px calc(var(--composer-overlay-height) + 22px);
+  padding: 72px 34px calc(var(--composer-overlay-height) + 22px);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .conversation-path > .turn:first-child > .user-message {
