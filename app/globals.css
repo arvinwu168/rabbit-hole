@@ -2950,7 +2950,7 @@ button:disabled {
   gap: 5px;
   padding: 6px 8px 6px 10px;
   pointer-events: auto;
-  border-radius: 13px;
+  border-radius: 28px;
   box-shadow: 0 10px 34px rgba(21, 29, 23, 0.13), 0 2px 8px rgba(21, 29, 23, 0.06);
 }
 
@@ -2968,6 +2968,7 @@ button:disabled {
 :root[data-rabbit-hole-platform="ipad"] .composer-context > button {
   width: 30px;
   height: 30px;
+  border-radius: 50%;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .inference-controls {
@@ -2995,7 +2996,7 @@ button:disabled {
 :root[data-rabbit-hole-platform="ipad"] .send-button {
   width: 40px;
   height: 40px;
-  border-radius: 10px;
+  border-radius: 50%;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .send-button svg {
