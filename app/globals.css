@@ -757,6 +757,10 @@ button:disabled {
   gap: 5px;
 }
 
+.ipad-header-more {
+  display: none;
+}
+
 .lock-demo-form {
   display: flex;
   margin: 0;
@@ -2662,16 +2666,143 @@ button:disabled {
 }
 
 :root[data-rabbit-hole-platform="ipad"] .main-panel {
-  grid-template-rows: 72px minmax(0, 1fr) auto;
+  position: relative;
+  grid-template-rows: minmax(0, 1fr) auto;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .main-header {
-  gap: 18px;
-  padding-inline: 15px 22px;
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: 40;
+  height: 0;
+  min-height: 0;
+  padding: 0;
+  background: transparent;
+  border: 0;
+  backdrop-filter: none;
+  pointer-events: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .main-header-left {
+  position: absolute;
+  top: 14px;
+  left: 15px;
+  overflow: visible;
+  pointer-events: auto;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .main-header-left > .path-current,
+:root[data-rabbit-hole-platform="ipad"] .main-header-left > .breadcrumb {
+  display: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .main-header-actions {
+  display: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-header-more {
+  position: absolute;
+  top: 14px;
+  right: 15px;
+  flex: 0 0 auto;
+  display: block;
+  pointer-events: auto;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-button {
+  color: var(--ink-soft);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  box-shadow: 0 5px 18px rgba(21, 29, 23, 0.09);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-button.is-active {
+  color: var(--ink);
+  background: var(--paper-warm);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  width: min(340px, calc(100vw - 30px));
+  padding: 8px;
+  background: color-mix(in srgb, var(--panel) 96%, transparent);
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  box-shadow: 0 18px 48px rgba(21, 29, 23, 0.2);
+  backdrop-filter: blur(22px);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu > button,
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu-form > button {
+  width: 100%;
+  min-height: 58px;
+  display: grid;
+  grid-template-columns: 24px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 11px;
+  padding: 9px 11px;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-radius: 12px;
+  text-align: left;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu > button + button,
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu-form,
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu-form + button {
+  border-top: 1px solid var(--line);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu > button:active,
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu-form > button:active {
+  background: var(--paper-warm);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu > button.is-active {
+  color: var(--accent);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu-form {
+  margin: 0;
+  padding: 0;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu-copy {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu-copy strong {
+  font-size: 15px;
+  font-weight: 650;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu-copy small {
+  overflow: hidden;
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  line-height: 16px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-menu-value {
+  color: var(--ink-faint);
+  font-size: 12.5px;
+  font-weight: 600;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .breadcrumb {
   font-size: 15px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .selection-popover {
+  display: none;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .guest-badge,
@@ -2688,7 +2819,11 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .conversation-path {
   width: min(100%, 930px);
-  padding: 48px 38px 42px;
+  padding: 24px 38px 42px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .conversation-path > .turn:first-child > .user-message {
+  padding-right: 58px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .anchor-context {
@@ -2839,6 +2974,18 @@ button:disabled {
   display: none;
 }
 
+:root[data-rabbit-hole-platform="ipad"] .raw-branch-shortcut {
+  display: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .composer-meta {
+  display: none;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .command-palette-footer {
+  display: none;
+}
+
 :root[data-rabbit-hole-platform="ipad"] .access-card {
   width: min(100%, 480px);
   padding: 52px 48px 44px;
@@ -2933,6 +3080,12 @@ button:disabled {
 :root[data-rabbit-hole-platform="ipad"] .dev-mode-toggle.is-active {
   color: var(--accent);
   background: var(--accent-faint);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-button.is-active,
+:root[data-rabbit-hole-platform="ipad"] .ipad-more-button.is-active:hover {
+  color: var(--ink);
+  background: var(--paper-warm);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .new-chat-button:hover {

@@ -7,6 +7,7 @@ import {
   ChevronRight,
   Clock3,
   Copy,
+  Ellipsis,
   ExternalLink,
   FlaskConical,
   GitBranch,
@@ -98,6 +99,7 @@ const LEGACY_DEMO_CHAT_IDS = new Set([
 const MODEL_CONTROLS_STORAGE_KEY = "rabbit-hole-model-controls-visible";
 const DEV_MODE_STORAGE_KEY = "rabbit-hole-dev-mode";
 const RELAY_TOKEN_STORAGE_KEY = "rabbit-hole-chatgpt-relay-token";
+const NATIVE_BRANCH_FROM_SELECTION_EVENT = "rabbit-hole:native-branch-from-selection";
 const CHATGPT_RELAY_URL = "http://127.0.0.1:43119";
 const EXPERIMENT_MODE_AVAILABLE = isExperimentModeAvailable();
 
@@ -966,6 +968,7 @@ export function RabbitHoleApp() {
   const [selectedCommandIndex, setSelectedCommandIndex] = useState(0);
   const [commandPaletteDismissed, setCommandPaletteDismissed] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
+  const [ipadMoreMenuOpen, setIpadMoreMenuOpen] = useState(false);
   const [colorTheme, setColorTheme] = useState<ColorTheme>("light");
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -1349,10 +1352,12 @@ export function RabbitHoleApp() {
       const target = event.target as HTMLElement;
       if (!target.closest(".selection-popover")) setSelection(null);
       if (!target.closest(".branch-overflow")) setOpenBranchMenuId(null);
+      if (!target.closest(".ipad-header-more")) setIpadMoreMenuOpen(false);
     };
     const handleScroll = () => {
       setSelection(null);
       setOpenBranchMenuId(null);
+      setIpadMoreMenuOpen(false);
       if (!scrollElement) return;
       const distanceFromBottom =
         scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
@@ -1387,6 +1392,28 @@ export function RabbitHoleApp() {
       document.removeEventListener("keyup", captureKeyboardSelection);
       document.removeEventListener("touchend", captureTouchSelection);
     };
+  }, []);
+
+  useEffect(() => {
+    if (document.documentElement.dataset.rabbitHolePlatform !== "ipad") return;
+
+    const beginNativeBranch = (event: Event) => {
+      const detail = (event as CustomEvent<{ nodeId?: unknown; quote?: unknown }>).detail;
+      if (typeof detail?.nodeId !== "string" || typeof detail.quote !== "string") return;
+
+      const nodeId = detail.nodeId.trim();
+      const quote = detail.quote.trim().replace(/\s+/g, " ").slice(0, 480);
+      if (!nodeId || !quote) return;
+
+      setBranchContext({ parentId: nodeId, anchor: quote });
+      setSelection(null);
+      setOpenBranchMenuId(null);
+      window.getSelection()?.removeAllRanges();
+      window.setTimeout(() => composerRef.current?.focus(), 0);
+    };
+
+    window.addEventListener(NATIVE_BRANCH_FROM_SELECTION_EVENT, beginNativeBranch);
+    return () => window.removeEventListener(NATIVE_BRANCH_FROM_SELECTION_EVENT, beginNativeBranch);
   }, []);
 
   function updateNode(chatId: string, nodeId: string, update: Partial<TurnNode>) {
@@ -1882,6 +1909,18 @@ export function RabbitHoleApp() {
     window.setTimeout(() => composerRef.current?.focus(), 0);
   }
 
+  function toggleExperimentMode() {
+    const nextDevMode = !devMode;
+    setDevMode(nextDevMode);
+    if (nextDevMode) {
+      setModelControlsVisible(true);
+    } else {
+      setPendingFixtureId(null);
+      setPendingHelp(false);
+      if (composerValue.trimStart().startsWith("/")) setComposerValue("");
+    }
+  }
+
   return (
     <main className={`app-shell ${sidebarOpen ? "" : "sidebar-collapsed"}`}>
       <aside className="sidebar" aria-label="Conversation trees">
@@ -2011,17 +2050,7 @@ export function RabbitHoleApp() {
               <button
                 type="button"
                 className={`icon-button dev-mode-toggle ${devMode ? "is-active" : ""}`}
-                onClick={() => {
-                  const nextDevMode = !devMode;
-                  setDevMode(nextDevMode);
-                  if (nextDevMode) {
-                    setModelControlsVisible(true);
-                  } else {
-                    setPendingFixtureId(null);
-                    setPendingHelp(false);
-                    if (composerValue.trimStart().startsWith("/")) setComposerValue("");
-                  }
-                }}
+                onClick={toggleExperimentMode}
                 aria-label={`${devMode ? "Disable" : "Enable"} experiment mode`}
                 aria-pressed={devMode}
                 title={`${devMode ? "Disable" : "Enable"} experiment mode`}
@@ -2063,6 +2092,95 @@ export function RabbitHoleApp() {
             >
               <LogIn size={14} /> <span>Sign in</span>
             </button>
+          </div>
+          <div className="ipad-header-more">
+            <button
+              type="button"
+              className={`icon-button ipad-more-button ${ipadMoreMenuOpen ? "is-active" : ""}`}
+              onClick={() => setIpadMoreMenuOpen((open) => !open)}
+              aria-label="More controls"
+              aria-haspopup="menu"
+              aria-expanded={ipadMoreMenuOpen}
+            >
+              <Ellipsis size={22} />
+            </button>
+            {ipadMoreMenuOpen ? (
+              <div className="ipad-more-menu" role="menu" aria-label="More controls">
+                <button
+                  type="button"
+                  role="menuitemcheckbox"
+                  aria-checked={modelControlsVisible}
+                  onClick={() => setModelControlsVisible((visible) => !visible)}
+                >
+                  <SlidersHorizontal size={19} />
+                  <span className="ipad-more-menu-copy">
+                    <strong>Model controls</strong>
+                    <small>{selectedInference.providerLabel} · {selectedInference.modelLabel}</small>
+                  </span>
+                  <span className="ipad-more-menu-value">{modelControlsVisible ? "Shown" : "Hidden"}</span>
+                </button>
+                {EXPERIMENT_MODE_AVAILABLE ? (
+                  <button
+                    type="button"
+                    role="menuitemcheckbox"
+                    aria-checked={devMode}
+                    className={devMode ? "is-active" : undefined}
+                    onClick={toggleExperimentMode}
+                  >
+                    <FlaskConical size={19} />
+                    <span className="ipad-more-menu-copy">
+                      <strong>Experiment mode</strong>
+                      <small>Demo tools and fixtures</small>
+                    </span>
+                    <span className="ipad-more-menu-value">{devMode ? "On" : "Off"}</span>
+                  </button>
+                ) : null}
+                <button type="button" role="menuitem" onClick={toggleColorTheme}>
+                  {colorTheme === "dark" ? <Sun size={19} /> : <Moon size={19} />}
+                  <span className="ipad-more-menu-copy">
+                    <strong>Appearance</strong>
+                    <small>Switch to {colorTheme === "dark" ? "light" : "dark"} mode</small>
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIpadMoreMenuOpen(false);
+                    resetWorkspace();
+                  }}
+                >
+                  <RotateCcw size={19} />
+                  <span className="ipad-more-menu-copy">
+                    <strong>Start fresh</strong>
+                    <small>Reset this guest session</small>
+                  </span>
+                </button>
+                <form className="ipad-more-menu-form" action="/api/auth/logout" method="post">
+                  <button type="submit" role="menuitem">
+                    <Lock size={19} />
+                    <span className="ipad-more-menu-copy">
+                      <strong>Lock demo</strong>
+                      <small>Require the demo password again</small>
+                    </span>
+                  </button>
+                </form>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setIpadMoreMenuOpen(false);
+                    setSignInOpen(true);
+                  }}
+                >
+                  <LogIn size={19} />
+                  <span className="ipad-more-menu-copy">
+                    <strong>Sign in</strong>
+                    <small>Currently exploring as Guest</small>
+                  </span>
+                </button>
+              </div>
+            ) : null}
           </div>
         </header>
 
@@ -2428,6 +2546,13 @@ export function RabbitHoleApp() {
                   setCommandPaletteDismissed(false);
                 }}
                 onKeyDown={(event) => {
+                  if (
+                    event.key === "Enter"
+                    && document.documentElement.dataset.rabbitHolePlatform === "ipad"
+                  ) {
+                    return;
+                  }
+
                   if (commandPaletteVisible) {
                     if (event.key === "ArrowDown" || event.key === "ArrowUp") {
                       event.preventDefault();

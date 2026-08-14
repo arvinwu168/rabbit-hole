@@ -3,6 +3,73 @@ import SwiftUI
 import UIKit
 import WebKit
 
+private let branchSelectionMessageName = "rabbitHoleBranchSelection"
+private let nativeBranchEventName = "rabbit-hole:native-branch-from-selection"
+private let branchSelectionActionIdentifier = UIAction.Identifier(
+    "com.rabbit-hole.branch-from-selection"
+)
+
+struct NativeBranchSelection: Equatable {
+    let nodeId: String
+    let quote: String
+}
+
+@MainActor
+final class RabbitHoleWebViewController: UIViewController {
+    let webView: WKWebView
+    var onBranchFromSelection: ((NativeBranchSelection) -> Void)?
+    private var branchSelection: NativeBranchSelection?
+
+    init(webView: WKWebView) {
+        self.webView = webView
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    override func loadView() {
+        view = webView
+    }
+
+    override func buildMenu(with builder: UIMenuBuilder) {
+        super.buildMenu(with: builder)
+        guard builder.system == .context else { return }
+        guard branchSelection != nil,
+              builder.action(for: branchSelectionActionIdentifier) == nil else { return }
+
+        let action = UIAction(
+            title: "Branch from Selection",
+            image: UIImage(systemName: "arrow.triangle.branch"),
+            identifier: branchSelectionActionIdentifier
+        ) { [weak self] _ in
+            guard let self, let branchSelection = self.branchSelection else { return }
+            self.onBranchFromSelection?(branchSelection)
+        }
+        let copyAction = #selector(UIResponderStandardEditActions.copy(_:))
+
+        if #available(iOS 26.0, *) {
+            if builder.command(for: copyAction, propertyList: nil) != nil {
+                builder.insertElements([action], afterCommand: copyAction, propertyList: nil)
+            } else if builder.menu(for: .edit) != nil {
+                builder.insertElements([action], atStartOfMenu: .edit)
+            }
+        } else if builder.menu(for: .edit) != nil {
+            let branchGroup = UIMenu(title: "", options: .displayInline, children: [action])
+            builder.insertChild(branchGroup, atStartOfMenu: .edit)
+        }
+    }
+
+    func updateBranchSelection(_ selection: NativeBranchSelection?) {
+        guard branchSelection != selection else { return }
+        branchSelection = selection
+        UIMenuSystem.context.setNeedsRebuild()
+    }
+
+}
+
 @MainActor
 final class WebAppSession: ObservableObject {
     enum State: Equatable {
@@ -63,14 +130,14 @@ final class WebAppSession: ObservableObject {
     }
 }
 
-struct WebAppView: UIViewRepresentable {
+struct WebAppView: UIViewControllerRepresentable {
     @ObservedObject var session: WebAppSession
 
     func makeCoordinator() -> Coordinator {
         Coordinator(session: session)
     }
 
-    func makeUIView(context: Context) -> WKWebView {
+    func makeUIViewController(context: Context) -> RabbitHoleWebViewController {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = .default()
         configuration.defaultWebpagePreferences.allowsContentJavaScript = true
@@ -81,6 +148,56 @@ struct WebAppView: UIViewRepresentable {
                 injectionTime: .atDocumentStart,
                 forMainFrameOnly: true
             )
+        )
+        configuration.userContentController.addUserScript(
+            WKUserScript(
+                source: #"""
+                (() => {
+                  let pendingFrame = 0;
+
+                  const publishSelection = () => {
+                    pendingFrame = 0;
+                    const selected = window.getSelection();
+                    let payload = {};
+
+                    if (selected && !selected.isCollapsed && selected.rangeCount > 0) {
+                      const anchorElement = selected.anchorNode instanceof Element
+                        ? selected.anchorNode
+                        : selected.anchorNode?.parentElement;
+                      const focusElement = selected.focusNode instanceof Element
+                        ? selected.focusNode
+                        : selected.focusNode?.parentElement;
+                      const anchorResponse = anchorElement?.closest('.markdown-body[data-node-id]');
+                      const focusResponse = focusElement?.closest('.markdown-body[data-node-id]');
+                      const quote = selected.toString().trim().replace(/\s+/g, ' ');
+
+                      if (anchorResponse && anchorResponse === focusResponse && quote) {
+                        payload = {
+                          nodeId: anchorResponse.dataset.nodeId || '',
+                          quote: quote.slice(0, 480),
+                        };
+                      }
+                    }
+
+                    window.webkit.messageHandlers.rabbitHoleBranchSelection.postMessage(payload);
+                  };
+
+                  const scheduleSelectionUpdate = () => {
+                    if (pendingFrame) cancelAnimationFrame(pendingFrame);
+                    pendingFrame = requestAnimationFrame(publishSelection);
+                  };
+
+                  document.addEventListener('selectionchange', scheduleSelectionUpdate, true);
+                  document.addEventListener('touchend', () => setTimeout(publishSelection, 0), true);
+                })();
+                """#,
+                injectionTime: .atDocumentStart,
+                forMainFrameOnly: true
+            )
+        )
+        configuration.userContentController.add(
+            context.coordinator,
+            name: branchSelectionMessageName
         )
 
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -103,22 +220,47 @@ struct WebAppView: UIViewRepresentable {
         }
         #endif
 
+        let viewController = RabbitHoleWebViewController(webView: webView)
+        context.coordinator.webViewController = viewController
+        viewController.onBranchFromSelection = { [weak webView] selection in
+            guard let webView else { return }
+            let payload: [String: String] = [
+                "nodeId": selection.nodeId,
+                "quote": selection.quote,
+            ]
+            guard let data = try? JSONSerialization.data(withJSONObject: payload),
+                  let json = String(data: data, encoding: .utf8) else { return }
+            webView.evaluateJavaScript(
+                "window.dispatchEvent(new CustomEvent('\(nativeBranchEventName)', { detail: \(json) }));"
+            )
+        }
+
         session.attach(webView)
-        return webView
+        return viewController
     }
 
-    func updateUIView(_ webView: WKWebView, context: Context) {}
+    func updateUIViewController(_ viewController: RabbitHoleWebViewController, context: Context) {}
 
-    static func dismantleUIView(_ webView: WKWebView, coordinator: Coordinator) {
+    static func dismantleUIViewController(
+        _ viewController: RabbitHoleWebViewController,
+        coordinator: Coordinator
+    ) {
+        let webView = viewController.webView
         webView.stopLoading()
         webView.navigationDelegate = nil
         webView.uiDelegate = nil
+        webView.configuration.userContentController.removeScriptMessageHandler(
+            forName: branchSelectionMessageName
+        )
+        viewController.onBranchFromSelection = nil
         coordinator.session.detach(webView)
     }
 
     @MainActor
-    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
         let session: WebAppSession
+        weak var webViewController: RabbitHoleWebViewController?
+        private var editMenuIsPresented = false
 
         init(session: WebAppSession) {
             self.session = session
@@ -130,6 +272,52 @@ struct WebAppView: UIViewRepresentable {
 
         func webView(_ webView: WKWebView, didFinish navigation: WKNavigation?) {
             session.finishedNavigation()
+        }
+
+        func userContentController(
+            _ userContentController: WKUserContentController,
+            didReceive message: WKScriptMessage
+        ) {
+            guard message.name == branchSelectionMessageName,
+                  message.frameInfo.isMainFrame else { return }
+
+            guard let payload = message.body as? [String: Any],
+                  let rawNodeId = payload["nodeId"] as? String,
+                  let rawQuote = payload["quote"] as? String else {
+                if !editMenuIsPresented {
+                    webViewController?.updateBranchSelection(nil)
+                }
+                return
+            }
+
+            let nodeId = rawNodeId.trimmingCharacters(in: .whitespacesAndNewlines)
+            let quote = rawQuote.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !nodeId.isEmpty, !quote.isEmpty else {
+                if !editMenuIsPresented {
+                    webViewController?.updateBranchSelection(nil)
+                }
+                return
+            }
+
+            webViewController?.updateBranchSelection(
+                NativeBranchSelection(nodeId: nodeId, quote: String(quote.prefix(480)))
+            )
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            willPresentEditMenuWithAnimator animator: any UIEditMenuInteractionAnimating
+        ) {
+            editMenuIsPresented = true
+            UIMenuSystem.context.setNeedsRebuild()
+        }
+
+        func webView(
+            _ webView: WKWebView,
+            willDismissEditMenuWithAnimator animator: any UIEditMenuInteractionAnimating
+        ) {
+            editMenuIsPresented = false
+            webViewController?.updateBranchSelection(nil)
         }
 
         func webView(
