@@ -315,11 +315,16 @@ button:disabled {
   grid-template-columns: 0 minmax(0, 1fr);
 }
 
+.app-shell.sidebar-collapsed .sidebar {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .sidebar {
   min-width: var(--sidebar-width);
   height: 100dvh;
   display: grid;
-  grid-template-rows: auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
   overflow: hidden;
   background:
     radial-gradient(circle at 10% 0%, var(--surface-hover-strong), transparent 24%),
@@ -331,13 +336,18 @@ button:disabled {
   min-height: 62px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 13px 13px 10px 16px;
+  gap: 8px;
+  padding: 13px 13px 10px;
+}
+
+.sidebar-topbar .sidebar-toggle {
+  margin-left: auto;
 }
 
 .brand-lockup {
+  min-width: 0;
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 9px;
   font-size: 15px;
@@ -406,6 +416,35 @@ button:disabled {
 .icon-button:hover {
   color: var(--ink);
   background: var(--surface-hover);
+}
+
+.new-chat-button {
+  width: calc(100% - 20px);
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 2px 10px 10px;
+  padding: 0 15px;
+  color: var(--ink-soft);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  cursor: pointer;
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  text-align: left;
+  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+}
+
+.new-chat-button:hover {
+  color: var(--ink);
+  background: var(--surface-hover);
+}
+
+.new-chat-button:active {
+  transform: translateY(1px);
 }
 
 .sidebar-heading {
@@ -650,8 +689,39 @@ button:disabled {
   overflow: hidden;
 }
 
-.sidebar-toggle {
+.main-header .sidebar-toggle {
   margin-right: 2px;
+}
+
+.sidebar-show-button {
+  position: relative;
+}
+
+.sidebar-show-mark,
+.sidebar-show-icon {
+  transition: opacity 120ms ease, transform 120ms ease;
+}
+
+.sidebar-show-mark {
+  position: absolute;
+  inset: 2px;
+}
+
+.sidebar-show-icon {
+  opacity: 0;
+  transform: scale(0.82);
+}
+
+.sidebar-show-button:hover .sidebar-show-mark,
+.sidebar-show-button:focus-visible .sidebar-show-mark {
+  opacity: 0;
+  transform: scale(0.82);
+}
+
+.sidebar-show-button:hover .sidebar-show-icon,
+.sidebar-show-button:focus-visible .sidebar-show-icon {
+  opacity: 1;
+  transform: scale(1);
 }
 
 .breadcrumb {

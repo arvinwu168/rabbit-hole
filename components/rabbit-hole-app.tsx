@@ -1824,10 +1824,26 @@ export function RabbitHoleApp() {
             </span>
             <span>Rabbit Hole</span>
           </div>
-          <button type="button" className="icon-button" onClick={startNewChat} aria-label="New chat">
-            <SquarePen size={17} />
+          <button
+            type="button"
+            className="icon-button sidebar-toggle"
+            onClick={() => setSidebarOpen(false)}
+            aria-label="Hide sidebar"
+            title="Hide sidebar"
+          >
+            <PanelLeftClose size={18} />
           </button>
         </div>
+
+        <button
+          type="button"
+          className={`new-chat-button ${newChatMode ? "is-active" : ""}`}
+          onClick={startNewChat}
+          aria-current={newChatMode ? "page" : undefined}
+        >
+          <SquarePen size={20} strokeWidth={1.9} />
+          <span>New chat</span>
+        </button>
 
         <div className="sidebar-heading">
           <span>Chats</span>
@@ -1871,14 +1887,20 @@ export function RabbitHoleApp() {
       <section className="main-panel">
         <header className="main-header">
           <div className="main-header-left">
-            <button
-              type="button"
-              className="icon-button sidebar-toggle"
-              onClick={() => setSidebarOpen((value) => !value)}
-              aria-label={sidebarOpen ? "Hide sidebar" : "Show sidebar"}
-            >
-              {sidebarOpen ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
-            </button>
+            {!sidebarOpen ? (
+              <button
+                type="button"
+                className="icon-button sidebar-toggle sidebar-show-button"
+                onClick={() => setSidebarOpen(true)}
+                aria-label="Show sidebar"
+                title="Show sidebar"
+              >
+                <span className="brand-mark sidebar-show-mark" aria-hidden="true">
+                  <Rabbit size={17} strokeWidth={2.1} />
+                </span>
+                <PanelLeftOpen className="sidebar-show-icon" size={17} aria-hidden="true" />
+              </button>
+            ) : null}
             {newChatMode ? (
               <span className="path-current">New thought</span>
             ) : (

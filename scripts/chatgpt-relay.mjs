@@ -27,6 +27,9 @@ const DEFAULT_MAX_CONCURRENT = 1;
 const CHATGPT_ACCOUNT_COOLDOWN_MS = 60 * 60 * 1_000;
 const RESPONSE_STABILITY_MS = 450;
 const COMPOSER_STABILITY_MS = 750;
+const COMPOSER_TYPING_TARGET_MS = 4_000;
+const COMPOSER_TYPING_MIN_DELAY_MS = 2;
+const COMPOSER_TYPING_MAX_DELAY_MS = 65;
 let relayLogPath = null;
 let relayLogWarningShown = false;
 export const CHATGPT_INSTANT_LABEL = "Instant";
@@ -1003,6 +1006,47 @@ export async function waitForStableComposer(
   return true;
 }
 
+export function composerTypingDelay(
+  prompt,
+  {
+    targetMs = COMPOSER_TYPING_TARGET_MS,
+    minDelayMs = COMPOSER_TYPING_MIN_DELAY_MS,
+    maxDelayMs = COMPOSER_TYPING_MAX_DELAY_MS,
+  } = {},
+) {
+  const characters = Math.max(1, prompt.replace(/\n/g, "").length);
+  return Math.min(maxDelayMs, Math.max(minDelayMs, Math.round(targetMs / characters)));
+}
+
+export async function progressivelyFillComposer(composer, prompt, { signal } = {}) {
+  const lines = prompt.split("\n");
+  const delayMs = composerTypingDelay(prompt);
+  const startedAt = Date.now();
+  await composer.fill("");
+
+  for (let index = 0; index < lines.length; index += 1) {
+    if (signal?.aborted) throw cancellationError();
+    const line = lines[index];
+    if (line) {
+      await composer.pressSequentially(line, {
+        delay: delayMs,
+        signal,
+        timeout: Math.max(2_000, line.length * delayMs + 2_000),
+      });
+    }
+    if (index < lines.length - 1) {
+      await composer.press("Shift+Enter", { timeout: 1_500 });
+    }
+  }
+
+  return {
+    characters: prompt.length,
+    lines: lines.length,
+    delayMs,
+    elapsedMs: Date.now() - startedAt,
+  };
+}
+
 class ChatGptBrowser {
   constructor({
     executablePath,
@@ -1535,7 +1579,13 @@ class ChatGptBrowser {
         .locator('[data-message-author-role="user"]')
         .count()
         .catch(() => 0);
-      await composer.fill(prompt);
+      const typing = await progressivelyFillComposer(composer, prompt, { signal });
+      relayLog("generation.prompt-rendered", {
+        requestId,
+        clientRequestId: clientContext.clientRequestId ?? null,
+        pageId,
+        typing,
+      });
 
       setStage("submitting the prompt");
       if (signal.aborted) throw cancellationError();

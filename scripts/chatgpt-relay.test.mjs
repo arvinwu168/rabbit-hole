@@ -20,6 +20,8 @@ import {
   manualLoginArgs,
   openFreshChat,
   publicRelayError,
+  composerTypingDelay,
+  progressivelyFillComposer,
   relayBrowserArgs,
   selectInstantModel,
   submitChatGptPrompt,
@@ -197,6 +199,36 @@ test("the relay waits for a continuously stable composer before preparing a prom
     await waitForStableComposer(unstableComposer, { stabilityMs: 5, pollMs: 1 }),
     false,
   );
+});
+
+test("observable composer rendering types characters sequentially and preserves line breaks", async () => {
+  const actions = [];
+  const composer = {
+    fill: async (value) => actions.push(["fill", value]),
+    pressSequentially: async (value, options) => actions.push([
+      "type",
+      value,
+      options.delay,
+    ]),
+    press: async (key) => actions.push(["press", key]),
+  };
+
+  const result = await progressivelyFillComposer(composer, "first line\nsecond line");
+  assert.deepEqual(actions, [
+    ["fill", ""],
+    ["type", "first line", result.delayMs],
+    ["press", "Shift+Enter"],
+    ["type", "second line", result.delayMs],
+  ]);
+  assert.equal(result.lines, 2);
+  assert.equal(result.characters, 22);
+  assert.ok(result.delayMs >= 2 && result.delayMs <= 65);
+});
+
+test("observable typing cadence is deterministic and bounded", () => {
+  assert.equal(composerTypingDelay("short"), 65);
+  assert.equal(composerTypingDelay("x".repeat(1_500)), 3);
+  assert.equal(composerTypingDelay("same text"), composerTypingDelay("same text"));
 });
 
 test("the relay targets ChatGPT Instant and recognizes the account protection warning", () => {
