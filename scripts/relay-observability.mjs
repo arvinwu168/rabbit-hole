@@ -279,6 +279,22 @@ export class PersistentCooldownStore {
     return { ...this.state, persisted: this.lastWriteError === null };
   }
 
+  clear() {
+    const previousCooldownUntil = this.state.cooldownUntil;
+    this.state = { cooldownUntil: 0, reason: null, requestId: null };
+    try {
+      this.write();
+      this.lastWriteError = null;
+    } catch (error) {
+      this.lastWriteError = error instanceof Error ? error.message : String(error);
+    }
+    return {
+      ...this.state,
+      previousCooldownUntil,
+      persisted: this.lastWriteError === null,
+    };
+  }
+
   write() {
     if (!this.path) return;
     mkdirSync(dirname(this.path), { recursive: true });

@@ -135,6 +135,29 @@ test("cooldown state survives a relay restart without storing credentials", () =
   }
 });
 
+test("a user override clears and persists the local cooldown gate", () => {
+  const directory = mkdtempSync(join(tmpdir(), "rabbit-hole-relay-override-"));
+  const path = join(directory, "state.json");
+  try {
+    const store = new PersistentCooldownStore(path);
+    store.start({ now: 1_000, durationMs: 3_600_000, reason: "protection", requestId: "abc123" });
+    assert.deepEqual(store.clear(), {
+      cooldownUntil: 0,
+      reason: null,
+      requestId: null,
+      previousCooldownUntil: 3_601_000,
+      persisted: true,
+    });
+    assert.deepEqual(new PersistentCooldownStore(path).state, {
+      cooldownUntil: 0,
+      reason: null,
+      requestId: null,
+    });
+  } finally {
+    rmSync(directory, { recursive: true, force: true });
+  }
+});
+
 test("the report correlates sanitized client, relay, outcome, and traffic records", () => {
   const entries = parseRelayLog([
     JSON.stringify({ timestamp: "2026-08-13T00:00:00Z", event: "relay.start" }),
@@ -148,6 +171,7 @@ test("the report correlates sanitized client, relay, outcome, and traffic record
       prompt: { finalFingerprint: "0123456789abcdef" },
     }),
     JSON.stringify({ timestamp: "2026-08-13T00:00:02Z", event: "generation.submitted", requestId: "relay-1" }),
+    JSON.stringify({ timestamp: "2026-08-13T00:00:02Z", event: "account.cooldown.overridden" }),
     JSON.stringify({
       timestamp: "2026-08-13T00:00:03Z",
       event: "generation.done",
@@ -158,6 +182,8 @@ test("the report correlates sanitized client, relay, outcome, and traffic record
   ].join("\n"));
   const report = buildRelayReport(entries);
   assert.equal(report.currentSession.promptsSubmitted, 1);
+  assert.equal(report.currentSession.cooldownsOverridden, 1);
+  assert.equal(report.allTime.cooldownsOverridden, 1);
   assert.equal(report.recentRequests[0].clientRequestId, "node-1");
   assert.equal(report.recentRequests[0].outcome, "complete");
   assert.equal(report.recentRequests[0].traffic.requests, 10);

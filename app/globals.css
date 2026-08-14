@@ -2005,6 +2005,24 @@ button:disabled {
   background: var(--panel);
 }
 
+.relay-status-actions .relay-override-button {
+  padding-inline: 8px;
+  color: var(--warning);
+  background: var(--panel);
+  border: 1px solid var(--relay-rate-line);
+  font-weight: 650;
+}
+
+.relay-status-actions .relay-override-button:hover:not(:disabled) {
+  color: var(--ink);
+  border-color: color-mix(in srgb, var(--warning) 55%, var(--relay-rate-line));
+}
+
+.relay-status-actions .relay-override-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+
 .relay-session-metrics {
   display: flex;
   flex-wrap: wrap;

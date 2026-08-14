@@ -125,6 +125,10 @@ type RelayStatus =
   | "offline"
   | "unauthorized";
 
+type RelayConnectionCheckOptions = {
+  background?: boolean;
+};
+
 type RelaySessionDiagnostics = {
   uptimeMs: number;
   requestsReceived: number;
@@ -134,6 +138,7 @@ type RelaySessionDiagnostics = {
   failed: number;
   protectionWarnings: number;
   cooldownStarts: number;
+  cooldownOverrides: number;
   pagesOpened: number;
   pagesClosed: number;
   activePages: number;
@@ -952,6 +957,7 @@ export function RabbitHoleApp() {
   const [relayPaired, setRelayPaired] = useState(false);
   const [relayStatus, setRelayStatus] = useState<RelayStatus>("disconnected");
   const [relaySession, setRelaySession] = useState<RelaySessionDiagnostics | null>(null);
+  const [relayCooldownOverridePending, setRelayCooldownOverridePending] = useState(false);
   const [relayMessage, setRelayMessage] = useState(
     "First time: run npm run relay:login, sign in, close Chrome, then run npm run relay.",
   );
@@ -998,7 +1004,10 @@ export function RabbitHoleApp() {
   );
   const commandPaletteVisible = isCommandInput && !commandPaletteDismissed;
 
-  const checkRelayConnection = useCallback(async (candidateToken?: string) => {
+  const checkRelayConnection = useCallback(async (
+    candidateToken?: string,
+    options: RelayConnectionCheckOptions = {},
+  ) => {
     const token = (candidateToken ?? relayToken).trim();
     if (!token) {
       setRelayStatus("disconnected");
@@ -1006,8 +1015,10 @@ export function RabbitHoleApp() {
       return false;
     }
 
-    setRelayStatus("checking");
-    setRelayMessage("Checking the local browser session…");
+    if (!options.background) {
+      setRelayStatus("checking");
+      setRelayMessage("Checking the local browser session…");
+    }
     const controller = new AbortController();
     const timeout = window.setTimeout(() => controller.abort(), 3_500);
 
@@ -1075,6 +1086,63 @@ export function RabbitHoleApp() {
       window.clearTimeout(timeout);
     }
   }, [relayToken]);
+
+  const overrideRelayCooldown = useCallback(async () => {
+    const token = relayToken.trim();
+    if (!token || relayCooldownOverridePending) return;
+
+    setRelayCooldownOverridePending(true);
+    setRelayMessage("Clearing Rabbit Hole's local cooldown gate…");
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 3_500);
+
+    try {
+      const response = await fetchRelay("/cooldown/override", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        cache: "no-store",
+        signal: controller.signal,
+      });
+      const result = (await response.json().catch(() => ({}))) as {
+        error?: string;
+        overridden?: boolean;
+        persisted?: boolean;
+      };
+
+      if (response.status === 401) {
+        window.sessionStorage.removeItem(RELAY_TOKEN_STORAGE_KEY);
+        setRelayPaired(false);
+        setRelayStatus("unauthorized");
+        setRelayMessage("That pairing token was rejected. Copy the current token from the relay terminal.");
+        return;
+      }
+      if (!response.ok) {
+        throw new Error(result.error || `Relay returned ${response.status}`);
+      }
+
+      const ready = await checkRelayConnection(token);
+      if (ready) {
+        setRelayMessage(
+          result.persisted === false
+            ? "Cooldown cleared for this relay session, but its state file could not be updated; restarting may restore the old timer."
+            : result.overridden
+            ? "Local cooldown overridden. The next prompt will check ChatGPT again; another protection warning will restore the cooldown."
+            : "The local cooldown had already ended. ChatGPT is ready to be checked by the next prompt.",
+        );
+      }
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : "Unknown relay error";
+      setRelayStatus("rate-limited");
+      setRelayMessage(
+        detail === "Unknown Rabbit Hole relay endpoint."
+          ? "Restart npm run relay to enable cooldown overrides, then try again."
+          : "The local cooldown could not be overridden. Check that the relay is running and try again.",
+      );
+    } finally {
+      window.clearTimeout(timeout);
+      setRelayCooldownOverridePending(false);
+    }
+  }, [checkRelayConnection, relayCooldownOverridePending, relayToken]);
 
   useEffect(() => {
     const colorScheme = window.matchMedia("(prefers-color-scheme: dark)");
@@ -1203,12 +1271,12 @@ export function RabbitHoleApp() {
 
     const initialCheck = window.setTimeout(() => {
       if (window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) === relayToken) {
-        void checkRelayConnection(relayToken);
+        void checkRelayConnection(relayToken, { background: true });
       }
     }, 0);
     const interval = window.setInterval(() => {
       if (window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) === relayToken) {
-        void checkRelayConnection(relayToken);
+        void checkRelayConnection(relayToken, { background: true });
       }
     }, 12_000);
     return () => {
@@ -2227,6 +2295,21 @@ export function RabbitHoleApp() {
                   </span>
                   {relayStatus === "ready" || relayStatus === "rate-limited" ? (
                     <span className="relay-status-actions">
+                      {relayStatus === "rate-limited" ? (
+                        <button
+                          type="button"
+                          className="relay-override-button"
+                          onClick={() => void overrideRelayCooldown()}
+                          disabled={relayCooldownOverridePending}
+                        >
+                          {relayCooldownOverridePending ? (
+                            <LoaderCircle size={13} className="spin" />
+                          ) : (
+                            <Zap size={13} />
+                          )}
+                          Override cooldown
+                        </button>
+                      ) : null}
                       <button
                         type="button"
                         onClick={() => void checkRelayConnection()}
@@ -2249,6 +2332,7 @@ export function RabbitHoleApp() {
                     <span>{relaySession.traffic.requests} browser requests</span>
                     <span>{relaySession.traffic.chatgptApiRequests} ChatGPT API</span>
                     <span>{relaySession.protectionWarnings} protection warnings</span>
+                    <span>{relaySession.cooldownOverrides ?? 0} cooldown overrides</span>
                     <span>{relaySession.prewarmEnabled ? "prewarm on" : "prewarm off"}</span>
                     <span>concurrency {relaySession.maxConcurrentGenerations}</span>
                   </div>

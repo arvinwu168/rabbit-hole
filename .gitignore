@@ -22,3 +22,8 @@ next-env.d.ts
 .DS_Store
 npm-debug.log*
 /.rabbit-hole/
+
+# Xcode
+xcuserdata/
+*.xcuserstate
+DerivedData/

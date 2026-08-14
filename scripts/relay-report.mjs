@@ -90,6 +90,7 @@ export function buildRelayReport(entries) {
         ),
       ).length,
       cooldownsStarted: count(current, "account.cooldown.started"),
+      cooldownsOverridden: count(current, "account.cooldown.overridden"),
       pagesOpened: count(current, "browser.page.opened"),
       pagesClosed: count(current, "browser.page.closed"),
       prewarms: count(current, "browser.prewarm.ready"),
@@ -111,6 +112,7 @@ export function buildRelayReport(entries) {
       completed: count(entries, "generation.done"),
       failed: count(entries, "generation.failed"),
       cooldownsStarted: count(entries, "account.cooldown.started"),
+      cooldownsOverridden: count(entries, "account.cooldown.overridden"),
     },
     recentRequests: rows.slice(0, 12),
   };
@@ -139,7 +141,7 @@ function printReport(report, logPath) {
   process.stdout.write(`Log: ${logPath}\n`);
   process.stdout.write(`Current window: ${report.window.startedAt ?? "unknown"} → ${report.window.endedAt ?? "now"}\n\n`);
   process.stdout.write(`Requests: ${session.requestsReceived} received · ${session.promptsSubmitted} submitted · ${session.duplicatesBlocked} duplicates blocked\n`);
-  process.stdout.write(`Outcomes: ${session.completed} complete · ${session.failed} failed · ${session.protectionWarnings} protection warnings · ${session.cooldownsStarted} cooldowns\n`);
+  process.stdout.write(`Outcomes: ${session.completed} complete · ${session.failed} failed · ${session.protectionWarnings} protection warnings · ${session.cooldownsStarted} cooldowns · ${session.cooldownsOverridden} overridden\n`);
   process.stdout.write(`Pages: ${session.pagesOpened} opened · ${session.pagesClosed} closed · ${session.prewarms} prewarmed\n`);
   process.stdout.write(
     `Browser traffic (closed pages): ${formatNumber(session.browserTraffic.requests)} total · ${formatNumber(session.browserTraffic.chatgptApiRequests)} ChatGPT API · ${formatNumber(session.browserTraffic.documentLoads)} documents\n`,

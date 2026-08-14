@@ -1089,6 +1089,7 @@ class ChatGptBrowser {
       failed: 0,
       protectionWarnings: 0,
       cooldownStarts: 0,
+      cooldownOverrides: 0,
       pagesOpened: 0,
       pagesClosed: 0,
       peakPages: 0,
@@ -1410,6 +1411,26 @@ class ChatGptBrowser {
       persisted: persisted.persisted,
       persistenceError: this.cooldownStore.lastWriteError,
     });
+  }
+
+  overrideCooldown(now = Date.now()) {
+    const previous = this.cooldownStatus(now);
+    const cleared = this.cooldownStore.clear();
+    this.cooldownUntil = 0;
+    this.session.cooldownOverrides += 1;
+    relayLog("account.cooldown.overridden", {
+      previousRetryAt: previous.retryAt,
+      previousRemainingMs: previous.cooldownRemainingMs,
+      persisted: cleared.persisted,
+      persistenceError: this.cooldownStore.lastWriteError,
+    });
+    return {
+      overridden: previous.rateLimited,
+      previousRetryAt: previous.retryAt,
+      persisted: cleared.persisted,
+      persistenceError: this.cooldownStore.lastWriteError,
+      ...this.cooldownStatus(now),
+    };
   }
 
   async status() {
@@ -1846,6 +1867,15 @@ async function main() {
         generatedAt: new Date().toISOString(),
         session: browser.sessionDiagnostics(),
         cooldown: browser.cooldownStatus(),
+      });
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/cooldown/override") {
+      jsonResponse(response, 200, {
+        ok: true,
+        version: 1,
+        ...browser.overrideCooldown(),
       });
       return;
     }
