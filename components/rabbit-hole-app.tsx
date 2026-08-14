@@ -1490,7 +1490,11 @@ export function RabbitHoleApp() {
     const captureKeyboardSelection = (event: KeyboardEvent) => {
       if (event.shiftKey) captureSelection();
     };
-    const captureTouchSelection = () => window.setTimeout(captureSelection, 0);
+    const captureTouchSelection = (event: TouchEvent) => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!target?.closest(".markdown-body")) return;
+      window.setTimeout(captureSelection, 0);
+    };
 
     document.addEventListener("mouseup", captureSelection);
     document.addEventListener("keyup", captureKeyboardSelection);
@@ -2066,28 +2070,30 @@ export function RabbitHoleApp() {
         </div>
 
         <nav className="tree-nav" aria-label="Chats and branches">
-          {workspace.chats.length ? (
-            <ul className="tree-root-list">
-              {workspace.chats.map((chat) => {
-                const root = chat.nodes[chat.rootNodeId];
-                if (!root) return null;
-                return (
-                  <TreeNodeItem
-                    key={chat.id}
-                    chat={chat}
-                    node={root}
-                    depth={0}
-                    activeNodeId={workspace.activeChatId === chat.id ? workspace.activeNodeId : ""}
-                    expandedIds={expandedIds}
-                    onSelect={selectNode}
-                    onToggle={toggleNode}
-                  />
-                );
-              })}
-            </ul>
-          ) : (
-            <p className="empty-chat-list">Your conversations will appear here.</p>
-          )}
+          <div className="tree-scroll-content">
+            {workspace.chats.length ? (
+              <ul className="tree-root-list">
+                {workspace.chats.map((chat) => {
+                  const root = chat.nodes[chat.rootNodeId];
+                  if (!root) return null;
+                  return (
+                    <TreeNodeItem
+                      key={chat.id}
+                      chat={chat}
+                      node={root}
+                      depth={0}
+                      activeNodeId={workspace.activeChatId === chat.id ? workspace.activeNodeId : ""}
+                      expandedIds={expandedIds}
+                      onSelect={selectNode}
+                      onToggle={toggleNode}
+                    />
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="empty-chat-list">Your conversations will appear here.</p>
+            )}
+          </div>
         </nav>
 
         {EXPERIMENT_MODE_AVAILABLE && devMode ? (

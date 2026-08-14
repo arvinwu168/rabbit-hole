@@ -302,6 +302,13 @@ struct WebAppView: UIViewControllerRepresentable {
 
                   const publishSelection = () => {
                     pendingFrame = 0;
+                    const activeElement = document.activeElement;
+                    if (activeElement instanceof HTMLTextAreaElement
+                        || activeElement instanceof HTMLInputElement
+                        || activeElement?.isContentEditable) {
+                      return;
+                    }
+
                     const selected = window.getSelection();
                     let payload = {};
 
@@ -342,7 +349,27 @@ struct WebAppView: UIViewControllerRepresentable {
                   };
 
                   document.addEventListener('selectionchange', scheduleSelectionUpdate, true);
-                  document.addEventListener('touchend', () => setTimeout(publishSelection, 0), true);
+                  document.addEventListener('focusin', (event) => {
+                    const target = event.target;
+                    if (!(target instanceof HTMLTextAreaElement)
+                        && !(target instanceof HTMLInputElement)
+                        && !target?.isContentEditable) {
+                      return;
+                    }
+
+                    if (pendingFrame) cancelAnimationFrame(pendingFrame);
+                    pendingFrame = 0;
+                    window.webkit.messageHandlers.rabbitHoleBranchSelection.postMessage({});
+                  }, true);
+                  document.addEventListener('touchend', (event) => {
+                    const target = event.target;
+                    if (target instanceof HTMLTextAreaElement
+                        || target instanceof HTMLInputElement
+                        || target?.isContentEditable) {
+                      return;
+                    }
+                    setTimeout(publishSelection, 0);
+                  }, true);
 
                   const cancelPromptCopy = () => {
                     if (promptCopyTimer) window.clearTimeout(promptCopyTimer);
@@ -564,7 +591,6 @@ struct WebAppView: UIViewControllerRepresentable {
             willPresentEditMenuWithAnimator animator: any UIEditMenuInteractionAnimating
         ) {
             editMenuIsPresented = true
-            UIMenuSystem.context.setNeedsRebuild()
         }
 
         func webView(

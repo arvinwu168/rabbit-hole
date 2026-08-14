@@ -2539,7 +2539,7 @@ button:disabled {
 
 /* Native iPad shell: roomier type and touch targets without changing the desktop site. */
 :root[data-rabbit-hole-platform="ipad"] {
-  --sidebar-width: 264px;
+  --sidebar-width: 277.2px;
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
@@ -2581,6 +2581,7 @@ button:disabled {
 }
 
 :root[data-rabbit-hole-platform="ipad"] .tree-nav {
+  overflow-y: scroll;
   overscroll-behavior: contain;
 }
 
@@ -2678,7 +2679,12 @@ button:disabled {
 }
 
 :root[data-rabbit-hole-platform="ipad"] .tree-nav {
-  padding: 0 10px 12px;
+  padding: 0 10px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .tree-scroll-content {
+  min-height: calc(100% + 1px);
+  padding-bottom: 12px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .tree-children {
@@ -2919,7 +2925,12 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .conversation-path {
   width: min(100%, 930px);
+  min-height: calc(100% + 1px);
   padding: 72px 34px calc(var(--composer-overlay-height) + 22px);
+}
+
+:root[data-rabbit-hole-platform="ipad"] .new-chat-state {
+  min-height: calc(100% + 1px);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .conversation-path > .turn:first-child > .user-message {
