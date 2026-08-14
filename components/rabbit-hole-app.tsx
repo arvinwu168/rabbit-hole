@@ -1355,6 +1355,75 @@ export function RabbitHoleApp() {
   useEffect(() => {
     if (document.documentElement.dataset.rabbitHolePlatform !== "ipad") return;
 
+    const sidebarScroller = document.querySelector<HTMLElement>(".tree-nav");
+    if (!sidebarScroller) return;
+
+    let touchIsActive = false;
+    let settleTimer = 0;
+    let resizeFrame = 0;
+
+    const hasOnlyBounceOverflow = () =>
+      sidebarScroller.scrollHeight - sidebarScroller.clientHeight <= 2;
+
+    const clearSettleTimer = () => {
+      if (!settleTimer) return;
+      window.clearTimeout(settleTimer);
+      settleTimer = 0;
+    };
+
+    const settleAtOrigin = () => {
+      clearSettleTimer();
+      if (touchIsActive || !hasOnlyBounceOverflow()) return;
+      if (Math.abs(sidebarScroller.scrollTop) > 0.01) {
+        sidebarScroller.scrollTo({ top: 0, behavior: "auto" });
+      }
+    };
+
+    const scheduleSettle = () => {
+      clearSettleTimer();
+      if (touchIsActive || !hasOnlyBounceOverflow()) return;
+      settleTimer = window.setTimeout(settleAtOrigin, 240);
+    };
+
+    const handleTouchStart = () => {
+      touchIsActive = true;
+      clearSettleTimer();
+    };
+    const handleTouchFinish = () => {
+      touchIsActive = false;
+      scheduleSettle();
+    };
+    const handleResize = () => {
+      if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+      resizeFrame = window.requestAnimationFrame(settleAtOrigin);
+    };
+
+    const observer = new ResizeObserver(handleResize);
+    observer.observe(sidebarScroller);
+    const sidebarContent = sidebarScroller.firstElementChild;
+    if (sidebarContent) observer.observe(sidebarContent);
+
+    sidebarScroller.addEventListener("scroll", scheduleSettle);
+    sidebarScroller.addEventListener("scrollend", settleAtOrigin);
+    sidebarScroller.addEventListener("touchstart", handleTouchStart, { passive: true });
+    sidebarScroller.addEventListener("touchend", handleTouchFinish, { passive: true });
+    sidebarScroller.addEventListener("touchcancel", handleTouchFinish, { passive: true });
+
+    return () => {
+      observer.disconnect();
+      sidebarScroller.removeEventListener("scroll", scheduleSettle);
+      sidebarScroller.removeEventListener("scrollend", settleAtOrigin);
+      sidebarScroller.removeEventListener("touchstart", handleTouchStart);
+      sidebarScroller.removeEventListener("touchend", handleTouchFinish);
+      sidebarScroller.removeEventListener("touchcancel", handleTouchFinish);
+      clearSettleTimer();
+      if (resizeFrame) window.cancelAnimationFrame(resizeFrame);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (document.documentElement.dataset.rabbitHolePlatform !== "ipad") return;
+
     const composer = composerRef.current;
     const composerDock = composerDockRef.current;
     if (!composer || !composerDock) return;

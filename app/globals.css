@@ -2539,7 +2539,8 @@ button:disabled {
 
 /* Native iPad shell: roomier type and touch targets without changing the desktop site. */
 :root[data-rabbit-hole-platform="ipad"] {
-  --sidebar-width: 277.2px;
+  --sidebar-width: 291.06px;
+  --ipad-status-bar-inset: max(24px, env(safe-area-inset-top, 0px));
   height: 100%;
   overflow: hidden;
   overscroll-behavior: none;
@@ -2572,6 +2573,9 @@ button:disabled {
   position: fixed;
   inset: 0 auto 0 0;
   z-index: 50;
+  -webkit-touch-callout: none;
+  -webkit-user-select: none;
+  user-select: none;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .app-shell.sidebar-collapsed .sidebar {
@@ -2595,8 +2599,8 @@ button:disabled {
 }
 
 :root[data-rabbit-hole-platform="ipad"] .sidebar-topbar {
-  min-height: 64px;
-  padding: 10px 14px 8px;
+  min-height: calc(64px + var(--ipad-status-bar-inset));
+  padding: calc(10px + var(--ipad-status-bar-inset)) 14px 8px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .brand-lockup {
@@ -2680,11 +2684,27 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .tree-nav {
   padding: 0 10px;
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 16px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 16px,
+    #000 calc(100% - 16px),
+    transparent 100%
+  );
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .tree-scroll-content {
   min-height: calc(100% + 1px);
-  padding-bottom: 12px;
+  padding: 8px 0 20px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .tree-children {
@@ -2765,7 +2785,7 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .main-panel::before {
   top: 0;
-  height: 54px;
+  height: calc(64px + var(--ipad-status-bar-inset));
   background: linear-gradient(to bottom, color-mix(in srgb, var(--panel) 88%, transparent), transparent);
 }
 
@@ -2790,7 +2810,7 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .main-header-left {
   position: absolute;
-  top: 14px;
+  top: calc(10px + var(--ipad-status-bar-inset));
   left: 15px;
   overflow: visible;
   pointer-events: auto;
@@ -2807,7 +2827,7 @@ button:disabled {
 
 :root[data-rabbit-hole-platform="ipad"] .ipad-header-more {
   position: absolute;
-  top: 14px;
+  top: calc(10px + var(--ipad-status-bar-inset));
   right: 15px;
   flex: 0 0 auto;
   display: block;
@@ -2926,7 +2946,7 @@ button:disabled {
 :root[data-rabbit-hole-platform="ipad"] .conversation-path {
   width: min(100%, 930px);
   min-height: calc(100% + 1px);
-  padding: 72px 34px calc(var(--composer-overlay-height) + 22px);
+  padding: calc(68px + var(--ipad-status-bar-inset)) 34px calc(var(--composer-overlay-height) + 22px);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .new-chat-state {

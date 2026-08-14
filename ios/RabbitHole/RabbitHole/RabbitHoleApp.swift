@@ -7,7 +7,7 @@ struct RabbitHoleApp: App {
     var body: some Scene {
         WindowGroup {
             RabbitHoleRootView(session: session)
-                .statusBarHidden(true)
+                .statusBarHidden(false)
         }
     }
 }
