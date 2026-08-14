@@ -845,18 +845,27 @@ type BranchShelfProps = {
   onSelect: (nodeId: string) => void;
 };
 
-function getBranchBaseLabel(branch: TurnNode): string {
-  return branch.anchor ? `“${branch.anchor.quote}”` : makeChatTitle(branch.prompt);
+function getBranchBaseLabel(branch: TurnNode, quoteAnchor = true): string {
+  if (!branch.anchor) return makeChatTitle(branch.prompt);
+  return quoteAnchor ? `“${branch.anchor.quote}”` : branch.anchor.quote;
 }
 
-function getBranchLabel(branch: TurnNode, siblings: TurnNode[]): string {
-  const baseLabel = getBranchBaseLabel(branch);
+function getBranchLabel(branch: TurnNode, siblings: TurnNode[], quoteAnchor = true): string {
+  const baseLabel = getBranchBaseLabel(branch, quoteAnchor);
   const branchIndex = siblings.findIndex((sibling) => sibling.id === branch.id);
   const duplicateIndex = siblings
     .slice(0, branchIndex)
-    .filter((sibling) => getBranchBaseLabel(sibling) === baseLabel).length;
+    .filter((sibling) => getBranchBaseLabel(sibling, quoteAnchor) === baseLabel).length;
 
   return duplicateIndex ? `${baseLabel} · ${duplicateIndex + 1}` : baseLabel;
+}
+
+function getConversationScroller(fallback: HTMLDivElement | null) {
+  if (document.documentElement.dataset.rabbitHolePlatform === "ipad") {
+    return document.scrollingElement as HTMLElement | null;
+  }
+
+  return fallback;
 }
 
 function BranchShelf({
@@ -890,8 +899,11 @@ function BranchShelf({
             aria-current={isActive ? "page" : undefined}
             title={branch.anchor ? `Anchored to “${branch.anchor.quote}”\n${branch.prompt}` : branch.prompt}
           >
-            {branch.anchor ? <Quote size={11} /> : <GitBranch size={12} />}
-            <span>{getBranchLabel(branch, branches)}</span>
+            {branch.anchor ? <Quote size={14} /> : <GitBranch size={14} />}
+            <span className="branch-chip-label">
+              <span className="branch-label-default">{getBranchLabel(branch, branches)}</span>
+              <span className="branch-label-ipad">{getBranchLabel(branch, branches, false)}</span>
+            </span>
           </button>
         );
       })}
@@ -904,7 +916,7 @@ function BranchShelf({
             onClick={onToggleMenu}
             aria-expanded={menuOpen}
           >
-            More… <ChevronDown size={12} className={menuOpen ? "is-open" : ""} />
+            More… <ChevronDown size={14} className={menuOpen ? "is-open" : ""} />
           </button>
 
           {menuOpen ? (
@@ -920,10 +932,13 @@ function BranchShelf({
                     aria-current={isActive ? "page" : undefined}
                   >
                     <span className="branch-menu-icon" aria-hidden="true">
-                      {branch.anchor ? <Quote size={12} /> : <GitBranch size={13} />}
+                      {branch.anchor ? <Quote size={14} /> : <GitBranch size={14} />}
                     </span>
                     <span className="branch-menu-copy">
-                      <span className="branch-menu-label">{getBranchLabel(branch, branches)}</span>
+                      <span className="branch-menu-label">
+                        <span className="branch-label-default">{getBranchLabel(branch, branches)}</span>
+                        <span className="branch-label-ipad">{getBranchLabel(branch, branches, false)}</span>
+                      </span>
                       {branch.anchor ? <span className="branch-menu-prompt">{branch.prompt}</span> : null}
                     </span>
                     {isActive ? <Check size={13} className="branch-menu-check" /> : null}
@@ -1342,7 +1357,7 @@ export function RabbitHoleApp() {
   }, []);
 
   useLayoutEffect(() => {
-    const scrollElement = scrollRef.current;
+    const scrollElement = getConversationScroller(scrollRef.current);
     if (!activeNode || !scrollElement) return;
 
     const nodeChanged = lastViewedNodeIdRef.current !== activeNode.id;
@@ -1384,14 +1399,17 @@ export function RabbitHoleApp() {
         scrollElement.scrollHeight - scrollElement.scrollTop - scrollElement.clientHeight;
       followStreamRef.current = distanceFromBottom <= 80;
     };
-    const scrollElement = scrollRef.current;
+    const isIpad = document.documentElement.dataset.rabbitHolePlatform === "ipad";
+    const scrollElement = getConversationScroller(scrollRef.current);
     document.addEventListener("pointerdown", closeFloatingControls);
     window.addEventListener("resize", handleScroll);
-    scrollElement?.addEventListener("scroll", handleScroll);
+    if (isIpad) window.addEventListener("scroll", handleScroll);
+    else scrollElement?.addEventListener("scroll", handleScroll);
     return () => {
       document.removeEventListener("pointerdown", closeFloatingControls);
       window.removeEventListener("resize", handleScroll);
-      scrollElement?.removeEventListener("scroll", handleScroll);
+      if (isIpad) window.removeEventListener("scroll", handleScroll);
+      else scrollElement?.removeEventListener("scroll", handleScroll);
     };
   }, []);
 
@@ -1680,7 +1698,7 @@ export function RabbitHoleApp() {
     const chat = workspace.chats.find((item) => item.id === chatId);
     const destinationChanged = workspace.activeChatId !== chatId || workspace.activeNodeId !== nodeId;
     pendingPreservedScrollTopRef.current = preserveScroll && destinationChanged
-      ? scrollRef.current?.scrollTop ?? null
+      ? getConversationScroller(scrollRef.current)?.scrollTop ?? null
       : null;
     setWorkspace((current) => ({ ...current, activeChatId: chatId, activeNodeId: nodeId }));
     setNewChatMode(false);
