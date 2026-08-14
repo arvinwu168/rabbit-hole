@@ -15,6 +15,7 @@ import {
   type MockFixtureId,
   type StaticMockFixtureId,
 } from "@/lib/mock-fixtures";
+import { isRequestAuthenticated } from "@/lib/auth";
 
 type ChatMessage = {
   role: "user" | "assistant";
@@ -466,6 +467,13 @@ function gatewayResponse(
 }
 
 export async function POST(request: Request) {
+  if (!(await isRequestAuthenticated(request))) {
+    return new Response("Password required.", {
+      status: 401,
+      headers: { "Cache-Control": "no-store" },
+    });
+  }
+
   const contentLength = Number(request.headers.get("content-length") ?? 0);
   if (Number.isFinite(contentLength) && contentLength > MAX_REQUEST_CHARACTERS) {
     return new Response("Chat request body is too large.", { status: 413 });

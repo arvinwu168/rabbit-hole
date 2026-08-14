@@ -11,6 +11,7 @@ import {
   FlaskConical,
   GitBranch,
   LoaderCircle,
+  Lock,
   LogIn,
   MessageSquare,
   Moon,
@@ -98,6 +99,21 @@ const DEV_MODE_STORAGE_KEY = "rabbit-hole-dev-mode";
 const RELAY_TOKEN_STORAGE_KEY = "rabbit-hole-chatgpt-relay-token";
 const CHATGPT_RELAY_URL = "http://127.0.0.1:43119";
 const IS_DEVELOPMENT = process.env.NODE_ENV === "development";
+
+type LoopbackRequestInit = RequestInit & {
+  targetAddressSpace?: "loopback";
+};
+
+function fetchRelay(path: string, init: RequestInit = {}) {
+  return fetch(`${CHATGPT_RELAY_URL}${path}`, {
+    ...init,
+    targetAddressSpace: "loopback",
+  } as LoopbackRequestInit);
+}
+
+function fetchInference(usingRelay: boolean, init: RequestInit) {
+  return usingRelay ? fetchRelay("/chat", init) : fetch("/api/chat", init);
+}
 
 type RelayStatus =
   | "disconnected"
@@ -995,7 +1011,7 @@ export function RabbitHoleApp() {
     const timeout = window.setTimeout(() => controller.abort(), 3_500);
 
     try {
-      const response = await fetch(`${CHATGPT_RELAY_URL}/health`, {
+      const response = await fetchRelay("/health", {
         headers: { Authorization: `Bearer ${token}` },
         cache: "no-store",
         signal: controller.signal,
@@ -1368,7 +1384,7 @@ export function RabbitHoleApp() {
         throw new Error("Connect the local ChatGPT relay before sending a message.");
       }
 
-      const response = await fetch(usingRelay ? `${CHATGPT_RELAY_URL}/chat` : "/api/chat", {
+      const response = await fetchInference(usingRelay, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -1934,6 +1950,16 @@ export function RabbitHoleApp() {
             >
               {colorTheme === "dark" ? <Sun size={16} /> : <Moon size={16} />}
             </button>
+            <form className="lock-demo-form" action="/api/auth/logout" method="post">
+              <button
+                type="submit"
+                className="icon-button"
+                aria-label="Lock demo"
+                title="Lock demo"
+              >
+                <Lock size={15} />
+              </button>
+            </form>
             <span className="header-divider" aria-hidden="true" />
             <span className="guest-badge" title="Chats are saved only for this tab">
               <UserRound size={13} /> Guest

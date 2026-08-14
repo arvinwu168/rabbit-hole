@@ -26,6 +26,18 @@ npm run dev
 
 Open `http://localhost:3000`.
 
+## Password-protect the demo
+
+The app uses one shared password and a signed, seven-day browser session. Keep the password in server-side environment variables; the public repository intentionally does not contain it. Production fails closed when no password is configured.
+
+```dotenv
+RABBIT_HOLE_PASSWORD=your-shared-password
+RABBIT_HOLE_AUTH_SECRET=a-long-random-signing-secret
+RABBIT_HOLE_AUTH_DISABLED=0
+```
+
+Run `npm run dev:no-auth` when you want to skip the login during local testing. You can also set `RABBIT_HOLE_AUTH_DISABLED=1` and restart Next.js. A successful login lasts seven days; use the lock button in the app header or open `/api/auth/logout` to show the login again. Five failed password attempts from the same address trigger a ten-minute, best-effort login cooldown. Authenticated model requests are not rate-limited.
+
 ## Use a signed-in ChatGPT session
 
 Rabbit Hole includes an experimental local relay for the interview prototype. It launches a dedicated Chrome, Chromium, or Edge profile and drives the public ChatGPT interface from a process bound to `127.0.0.1`. Rabbit Hole never asks for a ChatGPT username or password, and browser cookies never leave the local relay profile.
@@ -65,6 +77,14 @@ These controls reduce accidental load but cannot guarantee account safety. The r
 The first login must use `relay:login` with a visible browser. The normal relay starts Chrome itself and attaches through a debugging port bound to `127.0.0.1`; it does not add Playwright’s automated-launch flags or any bot-detection bypasses. After the session has been established, `RABBIT_HOLE_RELAY_HEADLESS=1 npm run relay` can reuse the profile without a window, although visible mode is easier to recover when ChatGPT requests verification. Set `RABBIT_HOLE_BROWSER_PATH` if the relay cannot find a locally installed browser.
 
 This is a demo integration, not an official ChatGPT API. It depends on ChatGPT’s rendered UI and may break when that UI changes. The official account-backed authorization documented for custom clients applies to [Codex App Server](https://learn.chatgpt.com/docs/app-server), not a general-purpose ChatGPT web API.
+
+When Rabbit Hole is hosted, the relay still runs on each visitor's own computer; it is never hosted by Vercel and never shares one ChatGPT session between visitors. Start the relay with the exact deployed origin allowed, for example:
+
+```bash
+RABBIT_HOLE_ALLOWED_ORIGINS=https://your-rabbit-hole.vercel.app npm run relay
+```
+
+Then paste that local relay's pairing token into the hosted Rabbit Hole page. The browser may ask for permission to connect the public page to the loopback service. Each visitor who selects ChatGPT Relay needs their own running relay, pairing token, and signed-in ChatGPT browser profile.
 
 ## Use AI Gateway and the direct Groq fallback
 

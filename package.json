@@ -4,6 +4,7 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:no-auth": "RABBIT_HOLE_AUTH_DISABLED=1 next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint .",
@@ -11,7 +12,7 @@
     "relay:login": "node scripts/chatgpt-relay.mjs --login",
     "relay:report": "node scripts/relay-report.mjs",
     "test": "npm run test:rabbit-hole && npm run test:inference && npm run test:relay",
-    "test:rabbit-hole": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/rabbit-hole.test.mjs",
+    "test:rabbit-hole": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/rabbit-hole.test.mjs scripts/auth.test.mjs",
     "test:inference": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test scripts/inference-options.test.mjs",
     "test:relay": "node --test scripts/chatgpt-relay.test.mjs scripts/relay-observability.test.mjs"
   },
