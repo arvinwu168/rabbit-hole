@@ -491,6 +491,11 @@ button:disabled {
     0 9px 24px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
+.experiment-mode-always-on:disabled {
+  cursor: default;
+  opacity: 1;
+}
+
 .sidebar-heading {
   display: flex;
   align-items: center;
@@ -2679,6 +2684,12 @@ button:disabled {
 :root[data-rabbit-hole-platform="ipad"] .sidebar-topbar {
   min-height: calc(64px + var(--ipad-status-bar-inset));
   padding: calc(10px + var(--ipad-status-bar-inset)) 14px 8px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .sidebar-topbar[data-keyboard-positioned="true"] {
+  position: relative;
+  z-index: 4;
+  background: linear-gradient(to bottom, var(--sidebar) 76%, transparent);
 }
 
 :root[data-rabbit-hole-platform="ipad"] .brand-lockup {

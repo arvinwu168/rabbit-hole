@@ -124,7 +124,7 @@ Neither key is sent to the browser. The `/api/chat` route uses AI SDK Core for G
 
 ## Test offline with Mock fixtures
 
-Enable experiment mode with the flask button, then type `/` in the composer. It is available automatically during local development. To expose it in a production or preview build, set `NEXT_PUBLIC_RABBIT_HOLE_EXPERIMENT_MODE=1` for that Vercel environment and redeploy. `/fixture` opens the complete fixture catalog; type after it to filter, use ↑/↓ to select, and press Enter to choose. Choosing a fixture immediately adds its command—for example, `/fixture markdown`—as a test turn, switches the provider to Mock, and streams that fixture response. No placeholder prompt is needed.
+Experiment mode is always available and active. Type `/` in the composer to open its commands. `/fixture` opens the complete fixture catalog; type after it to filter, use ↑/↓ to select, and press Enter to choose. Choosing a fixture immediately adds its command—for example, `/fixture markdown`—as a test turn, switches the provider to Mock, and streams that fixture response. No placeholder prompt is needed.
 
 Available commands:
 

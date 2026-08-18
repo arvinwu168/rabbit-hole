@@ -99,7 +99,6 @@ const LEGACY_DEMO_CHAT_IDS = new Set([
   "chat-conference",
 ]);
 const MODEL_CONTROLS_STORAGE_KEY = "rabbit-hole-model-controls-visible";
-const DEV_MODE_STORAGE_KEY = "rabbit-hole-dev-mode";
 const RELAY_TOKEN_STORAGE_KEY = "rabbit-hole-chatgpt-relay-token";
 const NATIVE_BRANCH_FROM_SELECTION_EVENT = "rabbit-hole:native-branch-from-selection";
 const CHATGPT_RELAY_URL = "http://127.0.0.1:43119";
@@ -967,7 +966,7 @@ export function RabbitHoleApp() {
   );
   const [maxTokens, setMaxTokens] = useState<OutputTokenSetting>(DEFAULT_MAX_OUTPUT_TOKENS);
   const [modelControlsVisible, setModelControlsVisible] = useState(true);
-  const [devMode, setDevMode] = useState(false);
+  const devMode = true;
   const [relayToken, setRelayToken] = useState("");
   const [relayPaired, setRelayPaired] = useState(false);
   const [relayStatus, setRelayStatus] = useState<RelayStatus>("disconnected");
@@ -985,6 +984,8 @@ export function RabbitHoleApp() {
   const [colorTheme, setColorTheme] = useState<ColorTheme>("light");
   const composerRef = useRef<HTMLTextAreaElement>(null);
   const composerDockRef = useRef<HTMLDivElement>(null);
+  const mainHeaderRef = useRef<HTMLElement>(null);
+  const sidebarTopbarRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const followStreamRef = useRef(true);
   const lastViewedNodeIdRef = useRef<string | null>(null);
@@ -1214,7 +1215,6 @@ export function RabbitHoleApp() {
   useEffect(() => {
     let restored: WorkspaceState | null = null;
     let restoredModelControlsVisibility: boolean | null = null;
-    let restoredDevMode = false;
     let restoredRelayToken = "";
     try {
       window.localStorage.removeItem(LEGACY_WORKSPACE_STORAGE_KEY);
@@ -1238,9 +1238,6 @@ export function RabbitHoleApp() {
       if (savedModelControlsVisibility !== null) {
         restoredModelControlsVisibility = savedModelControlsVisibility === "true";
       }
-      if (EXPERIMENT_MODE_AVAILABLE) {
-        restoredDevMode = window.localStorage.getItem(DEV_MODE_STORAGE_KEY) === "true";
-      }
       restoredRelayToken = window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) ?? "";
     } catch {}
 
@@ -1254,7 +1251,6 @@ export function RabbitHoleApp() {
       if (restoredModelControlsVisibility !== null) {
         setModelControlsVisible(restoredModelControlsVisibility);
       }
-      if (EXPERIMENT_MODE_AVAILABLE) setDevMode(restoredDevMode);
       if (restoredRelayToken) {
         setRelayToken(restoredRelayToken);
         setRelayPaired(true);
@@ -1280,11 +1276,6 @@ export function RabbitHoleApp() {
     if (!hydrated) return;
     window.localStorage.setItem(MODEL_CONTROLS_STORAGE_KEY, String(modelControlsVisible));
   }, [modelControlsVisible, hydrated]);
-
-  useEffect(() => {
-    if (!hydrated || !EXPERIMENT_MODE_AVAILABLE) return;
-    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, String(devMode));
-  }, [devMode, hydrated]);
 
   useEffect(() => {
     if (!hydrated || inferenceOptionId !== "chatgpt-relay" || !relayToken || !relayPaired) return;
@@ -1432,7 +1423,9 @@ export function RabbitHoleApp() {
 
     const composer = composerRef.current;
     const composerDock = composerDockRef.current;
-    if (!composer || !composerDock) return;
+    const mainHeader = mainHeaderRef.current;
+    const sidebarTopbar = sidebarTopbarRef.current;
+    if (!composer || !composerDock || !mainHeader || !sidebarTopbar) return;
 
     const viewport = window.visualViewport;
     let focused = false;
@@ -1450,6 +1443,13 @@ export function RabbitHoleApp() {
       composerDock.style.top = `${Math.round(top)}px`;
       composerDock.style.bottom = "auto";
       composerDock.dataset.keyboardPositioned = "true";
+
+      const headerOffset = Math.max(0, Math.round(pageTop));
+      mainHeader.style.position = "absolute";
+      mainHeader.style.top = `${headerOffset}px`;
+      mainHeader.dataset.keyboardPositioned = "true";
+      sidebarTopbar.style.transform = `translateY(${headerOffset}px)`;
+      sidebarTopbar.dataset.keyboardPositioned = "true";
     };
 
     const scheduleFocusedPosition = () => {
@@ -1473,6 +1473,11 @@ export function RabbitHoleApp() {
         composerDock.style.removeProperty("top");
         composerDock.style.removeProperty("bottom");
         delete composerDock.dataset.keyboardPositioned;
+        mainHeader.style.removeProperty("position");
+        mainHeader.style.removeProperty("top");
+        delete mainHeader.dataset.keyboardPositioned;
+        sidebarTopbar.style.removeProperty("transform");
+        delete sidebarTopbar.dataset.keyboardPositioned;
       }, 350);
     };
 
@@ -1500,6 +1505,11 @@ export function RabbitHoleApp() {
       composerDock.style.removeProperty("top");
       composerDock.style.removeProperty("bottom");
       delete composerDock.dataset.keyboardPositioned;
+      mainHeader.style.removeProperty("position");
+      mainHeader.style.removeProperty("top");
+      delete mainHeader.dataset.keyboardPositioned;
+      sidebarTopbar.style.removeProperty("transform");
+      delete sidebarTopbar.dataset.keyboardPositioned;
     };
   }, []);
 
@@ -1972,7 +1982,6 @@ export function RabbitHoleApp() {
 
     if (!option.fixture) return;
 
-    setDevMode(true);
     setModelControlsVisible(true);
     setInferenceOptionId("mock");
     setPendingHelp(false);
@@ -2118,22 +2127,10 @@ export function RabbitHoleApp() {
     window.setTimeout(() => composerRef.current?.focus(), 0);
   }
 
-  function toggleExperimentMode() {
-    const nextDevMode = !devMode;
-    setDevMode(nextDevMode);
-    if (nextDevMode) {
-      setModelControlsVisible(true);
-    } else {
-      setPendingFixtureId(null);
-      setPendingHelp(false);
-      if (composerValue.trimStart().startsWith("/")) setComposerValue("");
-    }
-  }
-
   return (
     <main className={`app-shell ${sidebarOpen ? "" : "sidebar-collapsed"}`}>
       <aside className="sidebar" aria-label="Conversation trees">
-        <div className="sidebar-topbar">
+        <div className="sidebar-topbar" ref={sidebarTopbarRef}>
           <div className="brand-lockup">
             <span className="brand-mark" aria-hidden="true">
               <Rabbit size={17} strokeWidth={2.1} />
@@ -2205,7 +2202,7 @@ export function RabbitHoleApp() {
       </aside>
 
       <section className="main-panel">
-        <header className="main-header">
+        <header className="main-header" ref={mainHeaderRef}>
           <div className="main-header-left">
             {!sidebarOpen ? (
               <button
@@ -2262,11 +2259,11 @@ export function RabbitHoleApp() {
             {EXPERIMENT_MODE_AVAILABLE ? (
               <button
                 type="button"
-                className={`icon-button dev-mode-toggle ${devMode ? "is-active" : ""}`}
-                onClick={toggleExperimentMode}
-                aria-label={`${devMode ? "Disable" : "Enable"} experiment mode`}
-                aria-pressed={devMode}
-                title={`${devMode ? "Disable" : "Enable"} experiment mode`}
+                className="icon-button dev-mode-toggle experiment-mode-always-on is-active"
+                aria-label="Experiment mode is always on"
+                aria-pressed="true"
+                title="Experiment mode is always on"
+                disabled
               >
                 <FlaskConical size={16} />
               </button>
@@ -2336,16 +2333,16 @@ export function RabbitHoleApp() {
                   <button
                     type="button"
                     role="menuitemcheckbox"
-                    aria-checked={devMode}
-                    className={devMode ? "is-active" : undefined}
-                    onClick={toggleExperimentMode}
+                    aria-checked="true"
+                    className="experiment-mode-always-on is-active"
+                    disabled
                   >
                     <FlaskConical size={19} />
                     <span className="ipad-more-menu-copy">
                       <strong>Experiment mode</strong>
                       <small>Demo tools and fixtures</small>
                     </span>
-                    <span className="ipad-more-menu-value">{devMode ? "On" : "Off"}</span>
+                    <span className="ipad-more-menu-value">Always on</span>
                   </button>
                 ) : null}
                 <button type="button" role="menuitem" onClick={toggleColorTheme}>

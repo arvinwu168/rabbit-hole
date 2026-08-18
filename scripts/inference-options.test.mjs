@@ -57,9 +57,6 @@ test("catalog IDs and display labels are resolved from the shared registry", () 
   assert.deepEqual(new Set(groupedIds), new Set(Object.keys(INFERENCE_OPTIONS)));
 });
 
-test("experiment mode is automatic locally and explicitly gated in production", () => {
-  assert.equal(resolveExperimentModeAvailability("development", undefined), true);
-  assert.equal(resolveExperimentModeAvailability("production", "1"), true);
-  assert.equal(resolveExperimentModeAvailability("production", undefined), false);
-  assert.equal(resolveExperimentModeAvailability("production", "0"), false);
+test("experiment mode is always available", () => {
+  assert.equal(resolveExperimentModeAvailability(), true);
 });
