@@ -130,6 +130,7 @@ Available commands:
 
 - `/demo tree` — add one randomized conversation tree without calling a model
 - `/demo forest` — add three randomized conversation trees without calling a model
+- `/demo biome` — add 30 deeper randomized conversation trees without calling a model
 - `/fixture anchored` — respond to an active quote-anchored branch
 - `/fixture markdown` — headings, tables, code, Mermaid, tasks, and break tags
 - `/fixture long` — long-answer scrolling, selection, and branching

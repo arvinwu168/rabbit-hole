@@ -11,6 +11,12 @@ import {
   oppositeColorTheme,
   resolveColorTheme,
 } from "../lib/theme.ts";
+import {
+  DEMO_BIOME_TREE_COUNT,
+  DEMO_FOREST_TREE_COUNT,
+  createRandomDemoBiome,
+  createRandomDemoChats,
+} from "../lib/demo-trees.ts";
 
 function turn(overrides = {}) {
   return {
@@ -147,4 +153,31 @@ test("color theme validation and toggling remain binary", () => {
   assert.equal(isColorTheme("system"), false);
   assert.equal(oppositeColorTheme("light"), "dark");
   assert.equal(oppositeColorTheme("dark"), "light");
+});
+
+function maximumTreeDepth(chat) {
+  const depthFor = (node) => {
+    if (node.parentId === null) return 0;
+    return 1 + depthFor(chat.nodes[node.parentId]);
+  };
+
+  return Math.max(...Object.values(chat.nodes).map(depthFor));
+}
+
+test("demo biome is ten forests and every generated tree is deeper", () => {
+  const forest = createRandomDemoChats(DEMO_FOREST_TREE_COUNT);
+  const biome = createRandomDemoBiome();
+
+  assert.equal(forest.length, DEMO_FOREST_TREE_COUNT);
+  assert.equal(DEMO_BIOME_TREE_COUNT, DEMO_FOREST_TREE_COUNT * 10);
+  assert.equal(biome.length, DEMO_BIOME_TREE_COUNT);
+  assert.equal(new Set(biome.map((chat) => chat.id)).size, DEMO_BIOME_TREE_COUNT);
+  assert.ok(biome.every((chat) => maximumTreeDepth(chat) >= 5));
+  assert.ok(
+    biome.every((chat) =>
+      Object.values(chat.nodes).every(
+        (node) => node.parentId === null || Boolean(chat.nodes[node.parentId]),
+      ),
+    ),
+  );
 });

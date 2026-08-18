@@ -63,7 +63,11 @@ import {
   makeChatTitle,
   sortChatsBySubtreeRecency,
 } from "@/lib/conversation-tree";
-import { createRandomDemoChats } from "@/lib/demo-trees";
+import {
+  DEMO_FOREST_TREE_COUNT,
+  createRandomDemoBiome,
+  createRandomDemoChats,
+} from "@/lib/demo-trees";
 import {
   MOCK_FIXTURES,
   getMockFixtureSelection,
@@ -162,7 +166,8 @@ type ComposerCommandOption = {
     | "show-help"
     | "select-fixture"
     | "demo-tree"
-    | "demo-forest";
+    | "demo-forest"
+    | "demo-biome";
   fixture?: MockFixtureSelection;
 };
 
@@ -180,6 +185,13 @@ const DEMO_COMMANDS: ComposerCommandOption[] = [
     label: "Generate a forest",
     description: "Add several randomized conversation trees without calling a model.",
     action: "demo-forest",
+  },
+  {
+    id: "demo-biome",
+    command: "/demo biome",
+    label: "Generate a biome",
+    description: "Add 30 deeper conversation trees without calling a model.",
+    action: "demo-biome",
   },
 ];
 
@@ -273,6 +285,7 @@ function developerHelpResponse(): string {
     "",
     "- `/demo tree` — add one randomized conversation tree.",
     "- `/demo forest` — add several randomized conversation trees.",
+    "- `/demo biome` — add 30 deeper randomized conversation trees.",
     "",
     "## Mock fixtures",
     "",
@@ -1942,8 +1955,16 @@ export function RabbitHoleApp() {
       return;
     }
 
-    if (option.action === "demo-tree" || option.action === "demo-forest") {
-      const chats = createRandomDemoChats(option.action === "demo-tree" ? 1 : 3);
+    if (
+      option.action === "demo-tree"
+      || option.action === "demo-forest"
+      || option.action === "demo-biome"
+    ) {
+      const chats = option.action === "demo-biome"
+        ? createRandomDemoBiome()
+        : createRandomDemoChats(
+            option.action === "demo-tree" ? 1 : DEMO_FOREST_TREE_COUNT,
+          );
       const activeChat = chats[0];
       const activeNodes = Object.values(activeChat.nodes);
       const activeNode = activeNodes[activeNodes.length - 1];
