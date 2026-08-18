@@ -60,6 +60,7 @@ import {
   getChildren,
   getChildrenBySubtreeRecency,
   getNodePath,
+  getVisibleBranchesByInteractionRecency,
   makeChatTitle,
   markNodePathInteracted,
   sortBranchesByInteractionRecency,
@@ -888,17 +889,7 @@ function BranchShelf({
   onSelect,
 }: BranchShelfProps) {
   const rankedBranches = sortBranchesByInteractionRecency(branches);
-  let visibleBranches = rankedBranches.slice(0, 3);
-
-  if (activeBranchId && !visibleBranches.some((branch) => branch.id === activeBranchId)) {
-    const activeBranch = branches.find((branch) => branch.id === activeBranchId);
-    if (activeBranch) {
-      visibleBranches = [
-        activeBranch,
-        ...rankedBranches.filter((branch) => branch.id !== activeBranchId),
-      ].slice(0, 3);
-    }
-  }
+  const visibleBranches = getVisibleBranchesByInteractionRecency(branches);
 
   return (
     <div className="branch-shelf" aria-label="Branches from this response">
@@ -1242,12 +1233,18 @@ export function RabbitHoleApp() {
         const chats = parsed.chats?.filter((chat) => !LEGACY_DEMO_CHAT_IDS.has(chat.id)) ?? [];
         if (chats.length) {
           const activeChat = chats.find((chat) => chat.id === parsed.activeChatId) ?? chats[0];
+          const activeNodeId = activeChat.nodes[parsed.activeNodeId]
+            ? parsed.activeNodeId
+            : activeChat.rootNodeId;
+          const restoredAt = Date.now();
           restored = {
-            chats,
+            chats: chats.map((chat) =>
+              chat.id === activeChat.id
+                ? markNodePathInteracted(chat, activeNodeId, restoredAt)
+                : chat,
+            ),
             activeChatId: activeChat.id,
-            activeNodeId: activeChat.nodes[parsed.activeNodeId]
-              ? parsed.activeNodeId
-              : activeChat.rootNodeId,
+            activeNodeId,
           };
         }
       }
@@ -2118,6 +2115,7 @@ export function RabbitHoleApp() {
       status: helpResponse ? "complete" : "streaming",
       createdAt: now,
       lastInteractedAt: now,
+      branchShelfEnteredAt: now,
       model: requestInferenceLabel,
       anchor,
     };

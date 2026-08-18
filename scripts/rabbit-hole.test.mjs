@@ -4,6 +4,7 @@ import {
   buildContinuationMessages,
   getChildren,
   getChildrenBySubtreeRecency,
+  getVisibleBranchesByInteractionRecency,
   markNodePathInteracted,
   sortBranchesByInteractionRecency,
   sortChatsBySubtreeRecency,
@@ -127,6 +128,51 @@ test("viewing a descendant makes every branch on its path recent", () => {
   assert.equal(viewed.nodes[descendant.id].lastInteractedAt, 100);
   assert.equal(viewed.nodes[sibling.id].lastInteractedAt, undefined);
   assert.equal(chat.nodes[branch.id].lastInteractedAt, undefined);
+});
+
+test("visible branch clips keep club order while recent interactions protect membership", () => {
+  const root = turn({ id: "root" });
+  const oldest = turn({ id: "oldest", parentId: root.id, createdAt: 10 });
+  const middle = turn({ id: "middle", parentId: root.id, createdAt: 20 });
+  const newest = turn({ id: "newest", parentId: root.id, createdAt: 30 });
+  const hidden = turn({ id: "hidden", parentId: root.id, createdAt: 5 });
+  let chat = {
+    id: "chat",
+    title: "Stable branch shelf",
+    rootNodeId: root.id,
+    createdAt: 1,
+    updatedAt: 30,
+    nodes: Object.fromEntries([root, oldest, middle, newest, hidden].map((node) => [node.id, node])),
+  };
+
+  assert.deepEqual(
+    getVisibleBranchesByInteractionRecency(getChildren(chat, root.id)).map((node) => node.id),
+    ["newest", "middle", "oldest"],
+  );
+
+  chat = markNodePathInteracted(chat, middle.id, 100);
+  assert.deepEqual(
+    getVisibleBranchesByInteractionRecency(getChildren(chat, root.id)).map((node) => node.id),
+    ["newest", "middle", "oldest"],
+  );
+
+  chat = markNodePathInteracted(chat, hidden.id, 110);
+  assert.deepEqual(
+    getVisibleBranchesByInteractionRecency(getChildren(chat, root.id)).map((node) => node.id),
+    ["hidden", "newest", "middle"],
+  );
+
+  chat = markNodePathInteracted(chat, middle.id, 120);
+  assert.deepEqual(
+    getVisibleBranchesByInteractionRecency(getChildren(chat, root.id)).map((node) => node.id),
+    ["hidden", "newest", "middle"],
+  );
+
+  chat = markNodePathInteracted(chat, oldest.id, 130);
+  assert.deepEqual(
+    getVisibleBranchesByInteractionRecency(getChildren(chat, root.id)).map((node) => node.id),
+    ["oldest", "hidden", "middle"],
+  );
 });
 
 test("sidebar siblings are ordered by the newest node anywhere in each subtree", () => {

@@ -56,6 +56,7 @@ export type TurnNode = {
   status: TurnStatus;
   createdAt: number;
   lastInteractedAt?: number;
+  branchShelfEnteredAt?: number;
   model: string;
   anchor?: QuoteAnchor;
   providerConversationUrl?: string;
@@ -122,6 +123,19 @@ export function sortBranchesByInteractionRecency(branches: TurnNode[]): TurnNode
     .map(({ branch }) => branch);
 }
 
+export function getVisibleBranchesByInteractionRecency(
+  branches: TurnNode[],
+  limit = 3,
+): TurnNode[] {
+  return sortBranchesByInteractionRecency(branches)
+    .slice(0, limit)
+    .sort(
+      (a, b) =>
+        (b.branchShelfEnteredAt ?? b.createdAt) - (a.branchShelfEnteredAt ?? a.createdAt)
+        || b.createdAt - a.createdAt,
+    );
+}
+
 export function markNodePathInteracted(
   chat: ChatTree,
   nodeId: string,
@@ -132,7 +146,21 @@ export function markNodePathInteracted(
 
   const nodes = { ...chat.nodes };
   for (const node of path) {
-    nodes[node.id] = { ...node, lastInteractedAt: interactedAt };
+    let branchShelfEnteredAt = node.branchShelfEnteredAt;
+    if (node.parentId) {
+      const visibleSiblings = getVisibleBranchesByInteractionRecency(
+        getChildren(chat, node.parentId),
+      );
+      if (!visibleSiblings.some((sibling) => sibling.id === node.id)) {
+        branchShelfEnteredAt = interactedAt;
+      }
+    }
+
+    nodes[node.id] = {
+      ...node,
+      lastInteractedAt: interactedAt,
+      ...(branchShelfEnteredAt === undefined ? {} : { branchShelfEnteredAt }),
+    };
   }
 
   return { ...chat, nodes };
