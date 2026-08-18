@@ -105,7 +105,77 @@ export function getNodePath(chat: ChatTree, nodeId: string): TurnNode[] {
 export function getChildren(chat: ChatTree, parentId: string): TurnNode[] {
   return Object.values(chat.nodes)
     .filter((node) => node.parentId === parentId)
-    .sort((a, b) => a.createdAt - b.createdAt);
+    .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+function indexChildren(chat: ChatTree): Map<string, TurnNode[]> {
+  const childrenByParent = new Map<string, TurnNode[]>();
+
+  for (const node of Object.values(chat.nodes)) {
+    if (!node.parentId) continue;
+    const siblings = childrenByParent.get(node.parentId) ?? [];
+    siblings.push(node);
+    childrenByParent.set(node.parentId, siblings);
+  }
+
+  return childrenByParent;
+}
+
+function makeSubtreeRecencyLookup(
+  chat: ChatTree,
+  childrenByParent = indexChildren(chat),
+): (nodeId: string) => number {
+  const cache = new Map<string, number>();
+
+  const visit = (currentNodeId: string, ancestors = new Set<string>()): number => {
+    const cached = cache.get(currentNodeId);
+    if (cached !== undefined) return cached;
+
+    const node = chat.nodes[currentNodeId];
+    if (!node || ancestors.has(currentNodeId)) return 0;
+
+    const nextAncestors = new Set(ancestors).add(currentNodeId);
+    const latestCreatedAt = (childrenByParent.get(currentNodeId) ?? []).reduce(
+      (latest, child) => Math.max(latest, visit(child.id, nextAncestors)),
+      node.createdAt,
+    );
+    cache.set(currentNodeId, latestCreatedAt);
+    return latestCreatedAt;
+  };
+
+  return visit;
+}
+
+export function getSubtreeLatestCreatedAt(chat: ChatTree, nodeId: string): number {
+  return makeSubtreeRecencyLookup(chat)(nodeId);
+}
+
+export function getChildrenBySubtreeRecency(chat: ChatTree, parentId: string): TurnNode[] {
+  const childrenByParent = indexChildren(chat);
+  const subtreeLatestCreatedAt = makeSubtreeRecencyLookup(chat, childrenByParent);
+
+  return [...(childrenByParent.get(parentId) ?? [])]
+    .sort(
+      (a, b) =>
+        subtreeLatestCreatedAt(b.id) - subtreeLatestCreatedAt(a.id)
+        || b.createdAt - a.createdAt,
+    );
+}
+
+export function sortChatsBySubtreeRecency(chats: ChatTree[]): ChatTree[] {
+  return chats
+    .map((chat, index) => ({
+      chat,
+      index,
+      latestCreatedAt: getSubtreeLatestCreatedAt(chat, chat.rootNodeId),
+    }))
+    .sort(
+      (a, b) =>
+        b.latestCreatedAt - a.latestCreatedAt
+        || b.chat.createdAt - a.chat.createdAt
+        || a.index - b.index,
+    )
+    .map(({ chat }) => chat);
 }
 
 export function getAncestorIds(chat: ChatTree, nodeId: string): string[] {

@@ -58,8 +58,10 @@ import {
   createEmptyWorkspace,
   getAncestorIds,
   getChildren,
+  getChildrenBySubtreeRecency,
   getNodePath,
   makeChatTitle,
+  sortChatsBySubtreeRecency,
 } from "@/lib/conversation-tree";
 import { createRandomDemoChats } from "@/lib/demo-trees";
 import {
@@ -683,7 +685,7 @@ function TreeNodeItem({
   onSelect,
   onToggle,
 }: TreeNodeProps) {
-  const children = getChildren(chat, node.id);
+  const children = getChildrenBySubtreeRecency(chat, node.id);
   const hasChildren = children.length > 0;
   const isExpanded = expandedIds.has(node.id);
   const isActive = activeNodeId === node.id;
@@ -1000,6 +1002,10 @@ export function RabbitHoleApp() {
   const activePath = useMemo(
     () => (activeChat && activeNode ? getNodePath(activeChat, activeNode.id) : []),
     [activeChat, activeNode],
+  );
+  const sidebarChats = useMemo(
+    () => sortChatsBySubtreeRecency(workspace.chats),
+    [workspace.chats],
   );
   const selectedInference = INFERENCE_OPTIONS[inferenceOptionId];
   const selectedOutputTokenSetting = selectedInference.supportsOutputCap ? maxTokens : undefined;
@@ -1878,6 +1884,28 @@ export function RabbitHoleApp() {
     }
   }
 
+  async function retryGeneration(chat: ChatTree, node: TurnNode) {
+    if (node.status !== "error" || generationControllersRef.current.has(node.id)) return;
+
+    const parentPath = node.parentId ? getNodePath(chat, node.parentId) : [];
+    const messages = buildContinuationMessages(parentPath, node.prompt, node.anchor);
+
+    updateNode(chat.id, node.id, {
+      response: "",
+      status: "streaming",
+      model: selectedInferenceLabel,
+      providerConversationUrl: undefined,
+      latency: undefined,
+    });
+    await streamIntoNode(
+      chat.id,
+      node.id,
+      node.prompt,
+      messages,
+      node.anchor?.quote,
+    );
+  }
+
   function disconnectRelay() {
     window.sessionStorage.removeItem(RELAY_TOKEN_STORAGE_KEY);
     setRelayToken("");
@@ -2123,16 +2151,6 @@ export function RabbitHoleApp() {
           </button>
         </div>
 
-        <button
-          type="button"
-          className={`new-chat-button ${newChatMode ? "is-active" : ""}`}
-          onClick={startNewChat}
-          aria-current={newChatMode ? "page" : undefined}
-        >
-          <SquarePen size={20} strokeWidth={1.9} />
-          <span>New chat</span>
-        </button>
-
         <div className="sidebar-heading">
           <span>Chats</span>
           <span className="sidebar-count">{workspace.chats.length}</span>
@@ -2142,7 +2160,7 @@ export function RabbitHoleApp() {
           <div className="tree-scroll-content">
             {workspace.chats.length ? (
               <ul className="tree-root-list">
-                {workspace.chats.map((chat) => {
+                {sidebarChats.map((chat) => {
                   const root = chat.nodes[chat.rootNodeId];
                   if (!root) return null;
                   return (
@@ -2165,13 +2183,25 @@ export function RabbitHoleApp() {
           </div>
         </nav>
 
-        {EXPERIMENT_MODE_AVAILABLE && devMode ? (
-          <div className="sidebar-footer">
-            <span className="provider-dot" />
-            <span>Experiment mode</span>
-            <span className="provider-name">Tools on</span>
-          </div>
-        ) : null}
+        <div className="sidebar-bottom">
+          <button
+            type="button"
+            className={`new-chat-fab ${newChatMode ? "is-active" : ""}`}
+            onClick={startNewChat}
+            aria-label="New chat"
+            aria-current={newChatMode ? "page" : undefined}
+            title="New chat"
+          >
+            <SquarePen size={20} strokeWidth={1.9} />
+          </button>
+          {EXPERIMENT_MODE_AVAILABLE && devMode ? (
+            <div className="sidebar-footer">
+              <span className="provider-dot" />
+              <span>Experiment mode</span>
+              <span className="provider-name">Tools on</span>
+            </div>
+          ) : null}
+        </div>
       </aside>
 
       <section className="main-panel">
@@ -2416,6 +2446,19 @@ export function RabbitHoleApp() {
                           </a>
                         ) : null}
                         <StatusMark status={node.status} />
+                        {node.status === "error" && activeChat ? (
+                          <button
+                            type="button"
+                            className="retry-generation-button"
+                            onClick={() => void retryGeneration(activeChat, node)}
+                            disabled={
+                              selectedInference.transport === "relay" && relayStatus !== "ready"
+                            }
+                            aria-label={`Retry response to ${makeChatTitle(node.prompt)} in the same branch`}
+                          >
+                            <RefreshCw size={11} /> Retry
+                          </button>
+                        ) : null}
                         {node.status === "streaming" && activeChat ? (
                           <button
                             type="button"

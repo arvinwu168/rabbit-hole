@@ -9,20 +9,20 @@
   --sidebar: #ececea;
   --line: #dededb;
   --line-strong: #cacac6;
-  --accent: #62666a;
-  --accent-strong: #36393c;
-  --accent-soft: #dedfdf;
-  --accent-faint: #f0f1f1;
+  --accent: #2563eb;
+  --accent-strong: #1d4ed8;
+  --accent-soft: #dbeafe;
+  --accent-faint: #eff6ff;
   --on-accent: #ffffff;
-  --brand-start: #73777b;
-  --brand-end: #414448;
+  --brand-start: #3b82f6;
+  --brand-end: #1d4ed8;
   --brand-ink: #ffffff;
-  --brand-hole: rgba(18, 20, 22, 0.55);
-  --brand-detail: #c8cbcd;
+  --brand-hole: rgba(15, 35, 82, 0.58);
+  --brand-detail: #bfdbfe;
   --surface-hover: rgba(255, 255, 255, 0.62);
   --surface-hover-strong: rgba(255, 255, 255, 0.78);
   --header-glass: rgba(253, 253, 252, 0.9);
-  --ambient: rgba(69, 73, 77, 0.045);
+  --ambient: rgba(37, 99, 235, 0.065);
   --composer-glass: rgba(253, 253, 252, 0.92);
   --overlay: rgba(24, 26, 28, 0.42);
   --code-background: #202326;
@@ -39,7 +39,7 @@
   --relay-rate-surface: #f8f4e9;
   --relay-rate-line: #dfd2ad;
   --warning: #8b6412;
-  --blue-selection: #d9dcde;
+  --blue-selection: #bfdbfe;
   --danger: #9e413b;
   --shadow-soft: 0 1px 2px rgba(22, 24, 26, 0.04), 0 8px 28px rgba(22, 24, 26, 0.07);
   --shadow-float: 0 14px 38px rgba(20, 22, 24, 0.17);
@@ -57,20 +57,20 @@
     --sidebar: #171819;
     --line: #2d3033;
     --line-strong: #3c4044;
-    --accent: #c2c5c8;
-    --accent-strong: #eceeef;
-    --accent-soft: #34373a;
-    --accent-faint: #242628;
-    --on-accent: #191a1b;
-    --brand-start: #d9dcde;
-    --brand-end: #9ca1a5;
-    --brand-ink: #202224;
-    --brand-hole: rgba(20, 22, 24, 0.62);
-    --brand-detail: #656a6e;
+    --accent: #60a5fa;
+    --accent-strong: #93c5fd;
+    --accent-soft: #1e3a5f;
+    --accent-faint: #17253b;
+    --on-accent: #071526;
+    --brand-start: #60a5fa;
+    --brand-end: #2563eb;
+    --brand-ink: #ffffff;
+    --brand-hole: rgba(7, 21, 38, 0.66);
+    --brand-detail: #bfdbfe;
     --surface-hover: rgba(255, 255, 255, 0.055);
     --surface-hover-strong: rgba(255, 255, 255, 0.09);
     --header-glass: rgba(27, 29, 31, 0.9);
-    --ambient: rgba(255, 255, 255, 0.025);
+    --ambient: rgba(96, 165, 250, 0.05);
     --composer-glass: rgba(27, 29, 31, 0.92);
     --overlay: rgba(4, 5, 6, 0.64);
     --code-background: #101112;
@@ -87,7 +87,7 @@
     --relay-rate-surface: #29251b;
     --relay-rate-line: #4c4228;
     --warning: #d2b365;
-    --blue-selection: #454a4e;
+    --blue-selection: #244a78;
     --danger: #e1847e;
     --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.18), 0 10px 30px rgba(0, 0, 0, 0.24);
     --shadow-float: 0 16px 42px rgba(0, 0, 0, 0.38);
@@ -109,20 +109,20 @@
   --sidebar: #171819;
   --line: #2d3033;
   --line-strong: #3c4044;
-  --accent: #c2c5c8;
-  --accent-strong: #eceeef;
-  --accent-soft: #34373a;
-  --accent-faint: #242628;
-  --on-accent: #191a1b;
-  --brand-start: #d9dcde;
-  --brand-end: #9ca1a5;
-  --brand-ink: #202224;
-  --brand-hole: rgba(20, 22, 24, 0.62);
-  --brand-detail: #656a6e;
+  --accent: #60a5fa;
+  --accent-strong: #93c5fd;
+  --accent-soft: #1e3a5f;
+  --accent-faint: #17253b;
+  --on-accent: #071526;
+  --brand-start: #60a5fa;
+  --brand-end: #2563eb;
+  --brand-ink: #ffffff;
+  --brand-hole: rgba(7, 21, 38, 0.66);
+  --brand-detail: #bfdbfe;
   --surface-hover: rgba(255, 255, 255, 0.055);
   --surface-hover-strong: rgba(255, 255, 255, 0.09);
   --header-glass: rgba(27, 29, 31, 0.9);
-  --ambient: rgba(255, 255, 255, 0.025);
+  --ambient: rgba(96, 165, 250, 0.05);
   --composer-glass: rgba(27, 29, 31, 0.92);
   --overlay: rgba(4, 5, 6, 0.64);
   --code-background: #101112;
@@ -139,7 +139,7 @@
   --relay-rate-surface: #29251b;
   --relay-rate-line: #4c4228;
   --warning: #d2b365;
-  --blue-selection: #454a4e;
+  --blue-selection: #244a78;
   --danger: #e1847e;
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.18), 0 10px 30px rgba(0, 0, 0, 0.24);
   --shadow-float: 0 16px 42px rgba(0, 0, 0, 0.38);
@@ -324,7 +324,7 @@ button:disabled {
   min-width: var(--sidebar-width);
   height: 100dvh;
   display: grid;
-  grid-template-rows: auto auto auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
   overflow: hidden;
   background:
     radial-gradient(circle at 10% 0%, var(--surface-hover-strong), transparent 24%),
@@ -418,33 +418,47 @@ button:disabled {
   background: var(--surface-hover);
 }
 
-.new-chat-button {
-  width: calc(100% - 20px);
-  min-height: 54px;
+.sidebar-bottom {
+  min-width: 0;
+  min-height: 72px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  margin: 2px 10px 10px;
-  padding: 0 15px;
-  color: var(--ink-soft);
-  background: transparent;
-  border: 1px solid transparent;
-  border-radius: 14px;
+  gap: 8px;
+  padding: 10px 12px 12px;
+  background: linear-gradient(transparent, var(--sidebar) 24%);
+}
+
+.new-chat-fab {
+  width: 50px;
+  height: 50px;
+  display: grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  color: var(--on-accent);
+  background: var(--accent);
+  border: 0;
+  border-radius: 50%;
+  box-shadow: 0 9px 24px color-mix(in srgb, var(--accent) 28%, transparent);
   cursor: pointer;
-  font-size: 14.5px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  text-align: left;
-  transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+  transition: background 120ms ease, box-shadow 120ms ease, transform 120ms ease;
 }
 
-.new-chat-button:hover {
-  color: var(--ink);
-  background: var(--surface-hover);
+.new-chat-fab:hover {
+  background: var(--accent-strong);
+  box-shadow: 0 11px 28px color-mix(in srgb, var(--accent) 36%, transparent);
+  transform: translateY(-1px);
 }
 
-.new-chat-button:active {
+.new-chat-fab:active {
   transform: translateY(1px);
+}
+
+.new-chat-fab.is-active {
+  box-shadow:
+    0 0 0 3px var(--panel),
+    0 0 0 5px color-mix(in srgb, var(--accent) 45%, transparent),
+    0 9px 24px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
 .sidebar-heading {
@@ -629,14 +643,15 @@ button:disabled {
 }
 
 .sidebar-footer {
+  min-width: 0;
   min-height: 47px;
   display: flex;
+  flex: 1;
   align-items: center;
   gap: 7px;
-  margin: 0 10px;
-  padding: 12px 8px;
+  margin: 0;
+  padding: 10px 5px 10px 8px;
   color: var(--ink-faint);
-  border-top: 1px solid var(--line);
   font-size: 11px;
 }
 
@@ -1148,6 +1163,29 @@ button:disabled {
 
 .message-status.is-cancelled {
   color: var(--ink-faint);
+}
+
+.retry-generation-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 6px;
+  color: var(--accent);
+  background: var(--accent-faint);
+  border: 1px solid var(--accent-soft);
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 10px;
+  font-weight: 650;
+}
+
+.retry-generation-button:hover:not(:disabled) {
+  color: var(--accent-strong);
+  border-color: color-mix(in srgb, var(--accent) 42%, var(--accent-soft));
+}
+
+.retry-generation-button:disabled {
+  opacity: 0.45;
 }
 
 .cancel-generation-button {
@@ -1687,6 +1725,7 @@ button:disabled {
 }
 
 .composer {
+  min-width: 0;
   width: min(100%, 792px);
   display: grid;
   gap: 7px;
@@ -1705,6 +1744,8 @@ button:disabled {
 }
 
 .composer-context {
+  min-width: 0;
+  max-width: 100%;
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -1716,13 +1757,16 @@ button:disabled {
   border-radius: 8px;
   font-size: 11px;
   line-height: 1.45;
+  overflow: hidden;
 }
 
 .composer-context-copy {
   min-width: 0;
   display: flex;
+  flex: 1 1 auto;
   align-items: flex-start;
   gap: 6px;
+  overflow: hidden;
 }
 
 .composer-context-copy svg {
@@ -1732,6 +1776,8 @@ button:disabled {
 }
 
 .composer-context-copy span {
+  min-width: 0;
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -2130,6 +2176,7 @@ button:disabled {
 }
 
 .composer-input-row {
+  min-width: 0;
   display: flex;
   align-items: flex-end;
   gap: 8px;
@@ -2215,7 +2262,7 @@ button:disabled {
   bottom: -4px;
   width: 9px;
   height: 9px;
-  background: var(--ink);
+  background: var(--accent-strong);
   transform: translateX(-50%) rotate(45deg);
 }
 
@@ -2226,8 +2273,8 @@ button:disabled {
   align-items: center;
   gap: 6px;
   padding: 8px 10px;
-  color: var(--panel);
-  background: var(--ink);
+  color: var(--on-accent);
+  background: var(--accent-strong);
   border: 0;
   border-radius: 8px;
   cursor: pointer;
@@ -2658,17 +2705,19 @@ button:disabled {
   transform: none;
 }
 
-:root[data-rabbit-hole-platform="ipad"] .new-chat-button {
-  min-height: 52px;
-  gap: 11px;
-  margin-bottom: 6px;
-  padding-inline: 16px;
-  font-size: 16.5px;
+:root[data-rabbit-hole-platform="ipad"] .sidebar-bottom {
+  min-height: 82px;
+  padding: 10px 14px max(12px, env(safe-area-inset-bottom, 0px));
 }
 
-:root[data-rabbit-hole-platform="ipad"] .new-chat-button svg {
-  width: 22px;
-  height: 22px;
+:root[data-rabbit-hole-platform="ipad"] .new-chat-fab {
+  width: 56px;
+  height: 56px;
+}
+
+:root[data-rabbit-hole-platform="ipad"] .new-chat-fab svg {
+  width: 24px;
+  height: 24px;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .sidebar-heading {
@@ -3401,9 +3450,11 @@ button:disabled {
   background: var(--panel);
 }
 
-:root[data-rabbit-hole-platform="ipad"] .new-chat-button:hover {
-  color: var(--ink-soft);
-  background: transparent;
+:root[data-rabbit-hole-platform="ipad"] .new-chat-fab:hover {
+  color: var(--on-accent);
+  background: var(--accent);
+  box-shadow: 0 9px 24px color-mix(in srgb, var(--accent) 28%, transparent);
+  transform: none;
 }
 
 :root[data-rabbit-hole-platform="ipad"] .tree-row:hover {

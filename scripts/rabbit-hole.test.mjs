@@ -1,6 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { buildContinuationMessages } from "../lib/conversation-tree.ts";
+import {
+  buildContinuationMessages,
+  getChildren,
+  getChildrenBySubtreeRecency,
+  sortChatsBySubtreeRecency,
+} from "../lib/conversation-tree.ts";
 import {
   isColorTheme,
   oppositeColorTheme,
@@ -57,6 +62,74 @@ test("provider error text is UI state and is not replayed as assistant context",
       { role: "user", content: "Explain the approach." },
       { role: "user", content: "Retry." },
     ],
+  );
+});
+
+test("main-chat branch clips put the most recently created sibling first", () => {
+  const root = turn({ id: "root" });
+  const olderBranch = turn({ id: "older", parentId: root.id, createdAt: 2 });
+  const newerBranch = turn({ id: "newer", parentId: root.id, createdAt: 5 });
+  const recentDescendant = turn({ id: "recent", parentId: olderBranch.id, createdAt: 10 });
+  const chat = {
+    id: "chat",
+    title: "Ordering",
+    rootNodeId: root.id,
+    createdAt: 1,
+    updatedAt: 10,
+    nodes: Object.fromEntries(
+      [root, olderBranch, newerBranch, recentDescendant].map((node) => [node.id, node]),
+    ),
+  };
+
+  assert.deepEqual(getChildren(chat, root.id).map((node) => node.id), ["newer", "older"]);
+});
+
+test("sidebar siblings are ordered by the newest node anywhere in each subtree", () => {
+  const root = turn({ id: "root" });
+  const olderBranch = turn({ id: "older", parentId: root.id, createdAt: 2 });
+  const newerBranch = turn({ id: "newer", parentId: root.id, createdAt: 5 });
+  const recentDescendant = turn({ id: "recent", parentId: olderBranch.id, createdAt: 10 });
+  const chat = {
+    id: "chat",
+    title: "Ordering",
+    rootNodeId: root.id,
+    createdAt: 1,
+    updatedAt: 10,
+    nodes: Object.fromEntries(
+      [root, olderBranch, newerBranch, recentDescendant].map((node) => [node.id, node]),
+    ),
+  };
+
+  assert.deepEqual(
+    getChildrenBySubtreeRecency(chat, root.id).map((node) => node.id),
+    ["older", "newer"],
+  );
+});
+
+test("sidebar chat roots are ordered by their newest descendant", () => {
+  const olderRoot = turn({ id: "older-root", createdAt: 1 });
+  const recentDescendant = turn({ id: "recent", parentId: olderRoot.id, createdAt: 10 });
+  const newerRoot = turn({ id: "newer-root", createdAt: 5 });
+  const olderChatWithRecentBranch = {
+    id: "older-chat",
+    title: "Older root",
+    rootNodeId: olderRoot.id,
+    createdAt: 1,
+    updatedAt: 10,
+    nodes: { [olderRoot.id]: olderRoot, [recentDescendant.id]: recentDescendant },
+  };
+  const newerChat = {
+    id: "newer-chat",
+    title: "Newer root",
+    rootNodeId: newerRoot.id,
+    createdAt: 5,
+    updatedAt: 5,
+    nodes: { [newerRoot.id]: newerRoot },
+  };
+
+  assert.deepEqual(
+    sortChatsBySubtreeRecency([newerChat, olderChatWithRecentBranch]).map((chat) => chat.id),
+    ["older-chat", "newer-chat"],
   );
 });
 
