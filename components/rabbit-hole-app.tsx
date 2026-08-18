@@ -61,6 +61,8 @@ import {
   getChildrenBySubtreeRecency,
   getNodePath,
   makeChatTitle,
+  markNodePathInteracted,
+  sortBranchesByInteractionRecency,
   sortChatsBySubtreeRecency,
 } from "@/lib/conversation-tree";
 import {
@@ -183,7 +185,7 @@ const DEMO_COMMANDS: ComposerCommandOption[] = [
     id: "demo-forest",
     command: "/demo forest",
     label: "Generate a forest",
-    description: "Add several randomized conversation trees without calling a model.",
+    description: "Add three randomized conversation trees without calling a model.",
     action: "demo-forest",
   },
   {
@@ -284,7 +286,7 @@ function developerHelpResponse(): string {
     "## Workspace generators",
     "",
     "- `/demo tree` — add one randomized conversation tree.",
-    "- `/demo forest` — add several randomized conversation trees.",
+    "- `/demo forest` — add three randomized conversation trees.",
     "- `/demo biome` — add 30 deeper randomized conversation trees.",
     "",
     "## Mock fixtures",
@@ -885,14 +887,16 @@ function BranchShelf({
   onToggleMenu,
   onSelect,
 }: BranchShelfProps) {
-  let visibleBranches = branches.length <= 3 ? branches : branches.slice(0, 3);
+  const rankedBranches = sortBranchesByInteractionRecency(branches);
+  let visibleBranches = rankedBranches.slice(0, 3);
 
   if (activeBranchId && !visibleBranches.some((branch) => branch.id === activeBranchId)) {
     const activeBranch = branches.find((branch) => branch.id === activeBranchId);
     if (activeBranch) {
-      visibleBranches = [...visibleBranches.slice(0, 2), activeBranch].sort(
-        (a, b) => branches.indexOf(a) - branches.indexOf(b),
-      );
+      visibleBranches = [
+        activeBranch,
+        ...rankedBranches.filter((branch) => branch.id !== activeBranchId),
+      ].slice(0, 3);
     }
   }
 
@@ -931,7 +935,7 @@ function BranchShelf({
 
           {menuOpen ? (
             <div className="branch-overflow-menu">
-              {branches.map((branch) => {
+              {rankedBranches.map((branch) => {
                 const isActive = branch.id === activeBranchId;
                 return (
                   <button
@@ -1626,21 +1630,28 @@ export function RabbitHoleApp() {
     return () => window.removeEventListener(NATIVE_BRANCH_FROM_SELECTION_EVENT, beginNativeBranch);
   }, []);
 
-  function updateNode(chatId: string, nodeId: string, update: Partial<TurnNode>) {
+  function updateNode(
+    chatId: string,
+    nodeId: string,
+    update: Partial<TurnNode>,
+    interactedAt?: number,
+  ) {
     setWorkspace((current) => ({
       ...current,
-      chats: current.chats.map((chat) =>
-        chat.id === chatId
-          ? {
-              ...chat,
-              updatedAt: Date.now(),
-              nodes: {
-                ...chat.nodes,
-                [nodeId]: { ...chat.nodes[nodeId], ...update },
-              },
-            }
-          : chat,
-      ),
+      chats: current.chats.map((chat) => {
+        if (chat.id !== chatId) return chat;
+        const interactedChat = interactedAt === undefined
+          ? chat
+          : markNodePathInteracted(chat, nodeId, interactedAt);
+        return {
+          ...interactedChat,
+          updatedAt: Date.now(),
+          nodes: {
+            ...interactedChat.nodes,
+            [nodeId]: { ...interactedChat.nodes[nodeId], ...update },
+          },
+        };
+      }),
     }));
   }
 
@@ -1871,7 +1882,16 @@ export function RabbitHoleApp() {
     pendingPreservedScrollTopRef.current = preserveScroll && destinationChanged
       ? getConversationScroller(scrollRef.current)?.scrollTop ?? null
       : null;
-    setWorkspace((current) => ({ ...current, activeChatId: chatId, activeNodeId: nodeId }));
+    // Selecting a descendant counts as viewing every branch along its path.
+    const interactedAt = Date.now();
+    setWorkspace((current) => ({
+      ...current,
+      activeChatId: chatId,
+      activeNodeId: nodeId,
+      chats: current.chats.map((item) =>
+        item.id === chatId ? markNodePathInteracted(item, nodeId, interactedAt) : item,
+      ),
+    }));
     setNewChatMode(false);
     setBranchContext(null);
     setSelection(null);
@@ -1913,13 +1933,16 @@ export function RabbitHoleApp() {
     const parentPath = node.parentId ? getNodePath(chat, node.parentId) : [];
     const messages = buildContinuationMessages(parentPath, node.prompt, node.anchor);
 
+    // A retry edits the existing branch rather than creating a replacement branch.
+    // eslint-disable-next-line react-hooks/purity
+    const interactedAt = Date.now();
     updateNode(chat.id, node.id, {
       response: "",
       status: "streaming",
       model: selectedInferenceLabel,
       providerConversationUrl: undefined,
       latency: undefined,
-    });
+    }, interactedAt);
     await streamIntoNode(
       chat.id,
       node.id,
@@ -2047,6 +2070,7 @@ export function RabbitHoleApp() {
         response: helpResponse ?? "",
         status: helpResponse ? "complete" : "streaming",
         createdAt: now,
+        lastInteractedAt: now,
         model: requestInferenceLabel,
       };
       const chat: ChatTree = {
@@ -2093,6 +2117,7 @@ export function RabbitHoleApp() {
       response: helpResponse ?? "",
       status: helpResponse ? "complete" : "streaming",
       createdAt: now,
+      lastInteractedAt: now,
       model: requestInferenceLabel,
       anchor,
     };
@@ -2102,15 +2127,15 @@ export function RabbitHoleApp() {
     setWorkspace((current) => ({
       ...current,
       activeNodeId: nodeId,
-      chats: current.chats.map((chat) =>
-        chat.id === activeChat.id
-          ? {
-              ...chat,
-              updatedAt: now,
-              nodes: { ...chat.nodes, [nodeId]: newNode },
-            }
-          : chat,
-      ),
+      chats: current.chats.map((chat) => {
+        if (chat.id !== activeChat.id) return chat;
+        const interactedChat = markNodePathInteracted(chat, parentId, now);
+        return {
+          ...interactedChat,
+          updatedAt: now,
+          nodes: { ...interactedChat.nodes, [nodeId]: newNode },
+        };
+      }),
     }));
     setExpandedIds((current) => new Set([...current, parentId, nodeId]));
     setBranchContext(null);

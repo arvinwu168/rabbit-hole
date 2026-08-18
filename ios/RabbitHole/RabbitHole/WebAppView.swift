@@ -236,7 +236,9 @@ final class WebAppSession: ObservableObject {
 
     func attach(_ webView: WKWebView) {
         self.webView = webView
-        loadHome()
+        // Revalidate the app shell on every launch so a newly deployed command or UI
+        // cannot remain hidden behind WKWebView's cached copy of the previous release.
+        loadHome(cachePolicy: .reloadRevalidatingCacheData)
     }
 
     func detach(_ webView: WKWebView) {
@@ -261,7 +263,7 @@ final class WebAppSession: ObservableObject {
         state = .failed(message)
     }
 
-    private func loadHome(cachePolicy: URLRequest.CachePolicy = .useProtocolCachePolicy) {
+    private func loadHome(cachePolicy: URLRequest.CachePolicy = .reloadRevalidatingCacheData) {
         guard let webView else { return }
         guard let url = configuration.webAppURL else {
             state = .failed(configuration.errorMessage ?? "The Rabbit Hole URL is not configured.")
@@ -448,6 +450,8 @@ struct WebAppView: UIViewControllerRepresentable {
         webView.scrollView.isDirectionalLockEnabled = true
         webView.backgroundColor = .systemBackground
         webView.isOpaque = true
+        // Keep native long-press selection blue without changing the app-wide accent palette.
+        webView.tintColor = .systemBlue
 
         #if DEBUG
         if #available(iOS 16.4, *) {

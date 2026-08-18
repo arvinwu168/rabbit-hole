@@ -4,6 +4,8 @@ import {
   buildContinuationMessages,
   getChildren,
   getChildrenBySubtreeRecency,
+  markNodePathInteracted,
+  sortBranchesByInteractionRecency,
   sortChatsBySubtreeRecency,
 } from "../lib/conversation-tree.ts";
 import {
@@ -88,6 +90,43 @@ test("main-chat branch clips put the most recently created sibling first", () =>
   };
 
   assert.deepEqual(getChildren(chat, root.id).map((node) => node.id), ["newer", "older"]);
+});
+
+test("main-chat branch clips prefer recently viewed or edited siblings", () => {
+  const branches = [
+    turn({ id: "newest-created", createdAt: 30 }),
+    turn({ id: "recently-edited", createdAt: 10, lastInteractedAt: 50 }),
+    turn({ id: "recently-viewed", createdAt: 20, lastInteractedAt: 60 }),
+    turn({ id: "older", createdAt: 5 }),
+  ];
+
+  assert.deepEqual(
+    sortBranchesByInteractionRecency(branches).map((node) => node.id),
+    ["recently-viewed", "recently-edited", "newest-created", "older"],
+  );
+});
+
+test("viewing a descendant makes every branch on its path recent", () => {
+  const root = turn({ id: "root" });
+  const branch = turn({ id: "branch", parentId: root.id, createdAt: 2 });
+  const descendant = turn({ id: "descendant", parentId: branch.id, createdAt: 3 });
+  const sibling = turn({ id: "sibling", parentId: root.id, createdAt: 4 });
+  const chat = {
+    id: "chat",
+    title: "Interaction tracking",
+    rootNodeId: root.id,
+    createdAt: 1,
+    updatedAt: 4,
+    nodes: Object.fromEntries([root, branch, descendant, sibling].map((node) => [node.id, node])),
+  };
+
+  const viewed = markNodePathInteracted(chat, descendant.id, 100);
+
+  assert.equal(viewed.nodes[root.id].lastInteractedAt, 100);
+  assert.equal(viewed.nodes[branch.id].lastInteractedAt, 100);
+  assert.equal(viewed.nodes[descendant.id].lastInteractedAt, 100);
+  assert.equal(viewed.nodes[sibling.id].lastInteractedAt, undefined);
+  assert.equal(chat.nodes[branch.id].lastInteractedAt, undefined);
 });
 
 test("sidebar siblings are ordered by the newest node anywhere in each subtree", () => {

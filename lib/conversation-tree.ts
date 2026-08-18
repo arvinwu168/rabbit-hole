@@ -55,6 +55,7 @@ export type TurnNode = {
   response: string;
   status: TurnStatus;
   createdAt: number;
+  lastInteractedAt?: number;
   model: string;
   anchor?: QuoteAnchor;
   providerConversationUrl?: string;
@@ -106,6 +107,35 @@ export function getChildren(chat: ChatTree, parentId: string): TurnNode[] {
   return Object.values(chat.nodes)
     .filter((node) => node.parentId === parentId)
     .sort((a, b) => b.createdAt - a.createdAt);
+}
+
+export function sortBranchesByInteractionRecency(branches: TurnNode[]): TurnNode[] {
+  return branches
+    .map((branch, index) => ({ branch, index }))
+    .sort(
+      (a, b) =>
+        (b.branch.lastInteractedAt ?? b.branch.createdAt)
+          - (a.branch.lastInteractedAt ?? a.branch.createdAt)
+        || b.branch.createdAt - a.branch.createdAt
+        || a.index - b.index,
+    )
+    .map(({ branch }) => branch);
+}
+
+export function markNodePathInteracted(
+  chat: ChatTree,
+  nodeId: string,
+  interactedAt: number,
+): ChatTree {
+  const path = getNodePath(chat, nodeId);
+  if (!path.length) return chat;
+
+  const nodes = { ...chat.nodes };
+  for (const node of path) {
+    nodes[node.id] = { ...node, lastInteractedAt: interactedAt };
+  }
+
+  return { ...chat, nodes };
 }
 
 function indexChildren(chat: ChatTree): Map<string, TurnNode[]> {

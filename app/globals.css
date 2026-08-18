@@ -39,7 +39,7 @@
   --relay-rate-surface: #f8f4e9;
   --relay-rate-line: #dfd2ad;
   --warning: #8b6412;
-  --blue-selection: #bfdbfe;
+  --blue-selection: rgba(0, 122, 255, 0.28);
   --danger: #9e413b;
   --shadow-soft: 0 1px 2px rgba(22, 24, 26, 0.04), 0 8px 28px rgba(22, 24, 26, 0.07);
   --shadow-float: 0 14px 38px rgba(20, 22, 24, 0.17);
@@ -87,7 +87,7 @@
     --relay-rate-surface: #29251b;
     --relay-rate-line: #4c4228;
     --warning: #d2b365;
-    --blue-selection: #244a78;
+    --blue-selection: rgba(10, 132, 255, 0.38);
     --danger: #e1847e;
     --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.18), 0 10px 30px rgba(0, 0, 0, 0.24);
     --shadow-float: 0 16px 42px rgba(0, 0, 0, 0.38);
@@ -139,7 +139,7 @@
   --relay-rate-surface: #29251b;
   --relay-rate-line: #4c4228;
   --warning: #d2b365;
-  --blue-selection: #244a78;
+  --blue-selection: rgba(10, 132, 255, 0.38);
   --danger: #e1847e;
   --shadow-soft: 0 1px 2px rgba(0, 0, 0, 0.18), 0 10px 30px rgba(0, 0, 0, 0.24);
   --shadow-float: 0 16px 42px rgba(0, 0, 0, 0.38);
@@ -187,7 +187,8 @@ button:disabled {
 }
 
 ::selection {
-  background: var(--blue-selection);
+  color: inherit;
+  background-color: var(--blue-selection);
 }
 
 .access-page {
