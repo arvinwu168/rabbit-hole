@@ -14,7 +14,7 @@ The iPad target is a native SwiftUI application that hosts the existing Rabbit H
 
 ## Run in the iPad Simulator
 
-The checked-in Debug and Release configurations point to the public Rabbit Hole deployment at `https://rabbit-hole-bice.vercel.app`.
+The checked-in Debug and Release configurations point to the public Rabbit Hole deployment at `https://rabbit-hole-mu.vercel.app`.
 
 1. Install the full Xcode application. Command Line Tools alone do not include the iPad Simulator or iOS SDK.
 2. Open `ios/RabbitHole/RabbitHole.xcodeproj` in Xcode.
@@ -27,7 +27,7 @@ To test against a local Next development server instead, temporarily change the 
 `RABBIT_HOLE_BASE_URL` under **RabbitHole target → Build Settings → User-Defined** is currently set to:
 
 ```text
-https://rabbit-hole-bice.vercel.app
+https://rabbit-hole-mu.vercel.app
 ```
 
 The URL is public configuration, not a secret. Keep `RABBIT_HOLE_PASSWORD`, `RABBIT_HOLE_AUTH_SECRET`, and every provider API key only in Vercel/server environment variables.
