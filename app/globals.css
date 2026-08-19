@@ -492,11 +492,6 @@ button:disabled {
     0 9px 24px color-mix(in srgb, var(--accent) 28%, transparent);
 }
 
-.experiment-mode-always-on:disabled {
-  cursor: default;
-  opacity: 1;
-}
-
 .sidebar-heading {
   display: flex;
   align-items: center;

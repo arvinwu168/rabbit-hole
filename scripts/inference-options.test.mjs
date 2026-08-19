@@ -11,7 +11,10 @@ import {
   modelLabelForId,
   normalizeMaxOutputTokens,
 } from "../lib/inference-options.ts";
-import { resolveExperimentModeAvailability } from "../lib/experiment-mode.ts";
+import {
+  resolveExperimentModeAvailability,
+  resolveExperimentModeEnabled,
+} from "../lib/experiment-mode.ts";
 
 test("the catalog exposes four Gateway models and independent backup paths", () => {
   const gatewayOptions = Object.values(INFERENCE_OPTIONS).filter(
@@ -57,6 +60,13 @@ test("catalog IDs and display labels are resolved from the shared registry", () 
   assert.deepEqual(new Set(groupedIds), new Set(Object.keys(INFERENCE_OPTIONS)));
 });
 
-test("experiment mode is always available", () => {
+test("the experiment mode toggle is always available", () => {
   assert.equal(resolveExperimentModeAvailability(), true);
+});
+
+test("experiment mode defaults on but preserves an explicit off choice", () => {
+  assert.equal(resolveExperimentModeEnabled(null), true);
+  assert.equal(resolveExperimentModeEnabled("true"), true);
+  assert.equal(resolveExperimentModeEnabled("false"), false);
+  assert.equal(resolveExperimentModeEnabled("unexpected"), true);
 });

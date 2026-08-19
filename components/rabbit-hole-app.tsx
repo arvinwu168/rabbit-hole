@@ -96,7 +96,10 @@ import {
   resolveColorTheme,
   type ColorTheme,
 } from "@/lib/theme";
-import { isExperimentModeAvailable } from "@/lib/experiment-mode";
+import {
+  isExperimentModeAvailable,
+  resolveExperimentModeEnabled,
+} from "@/lib/experiment-mode";
 
 const LEGACY_WORKSPACE_STORAGE_KEY = "rabbit-hole-workspace-v1";
 const GUEST_WORKSPACE_STORAGE_KEY = "rabbit-hole-guest-workspace-v1";
@@ -106,6 +109,7 @@ const LEGACY_DEMO_CHAT_IDS = new Set([
   "chat-conference",
 ]);
 const MODEL_CONTROLS_STORAGE_KEY = "rabbit-hole-model-controls-visible";
+const DEV_MODE_STORAGE_KEY = "rabbit-hole-dev-mode";
 const RELAY_TOKEN_STORAGE_KEY = "rabbit-hole-chatgpt-relay-token";
 const NATIVE_BRANCH_FROM_SELECTION_EVENT = "rabbit-hole:native-branch-from-selection";
 const CHATGPT_RELAY_URL = "http://127.0.0.1:43119";
@@ -974,7 +978,7 @@ export function RabbitHoleApp() {
   );
   const [maxTokens, setMaxTokens] = useState<OutputTokenSetting>(DEFAULT_MAX_OUTPUT_TOKENS);
   const [modelControlsVisible, setModelControlsVisible] = useState(true);
-  const devMode = true;
+  const [devMode, setDevMode] = useState(true);
   const [relayToken, setRelayToken] = useState("");
   const [relayPaired, setRelayPaired] = useState(false);
   const [relayStatus, setRelayStatus] = useState<RelayStatus>("disconnected");
@@ -1223,6 +1227,7 @@ export function RabbitHoleApp() {
   useEffect(() => {
     let restored: WorkspaceState | null = null;
     let restoredModelControlsVisibility: boolean | null = null;
+    let restoredDevMode = true;
     let restoredRelayToken = "";
     try {
       window.localStorage.removeItem(LEGACY_WORKSPACE_STORAGE_KEY);
@@ -1252,6 +1257,9 @@ export function RabbitHoleApp() {
       if (savedModelControlsVisibility !== null) {
         restoredModelControlsVisibility = savedModelControlsVisibility === "true";
       }
+      restoredDevMode = resolveExperimentModeEnabled(
+        window.localStorage.getItem(DEV_MODE_STORAGE_KEY),
+      );
       restoredRelayToken = window.sessionStorage.getItem(RELAY_TOKEN_STORAGE_KEY) ?? "";
     } catch {}
 
@@ -1265,6 +1273,7 @@ export function RabbitHoleApp() {
       if (restoredModelControlsVisibility !== null) {
         setModelControlsVisible(restoredModelControlsVisibility);
       }
+      setDevMode(restoredDevMode);
       if (restoredRelayToken) {
         setRelayToken(restoredRelayToken);
         setRelayPaired(true);
@@ -1290,6 +1299,11 @@ export function RabbitHoleApp() {
     if (!hydrated) return;
     window.localStorage.setItem(MODEL_CONTROLS_STORAGE_KEY, String(modelControlsVisible));
   }, [modelControlsVisible, hydrated]);
+
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(DEV_MODE_STORAGE_KEY, String(devMode));
+  }, [devMode, hydrated]);
 
   useEffect(() => {
     if (!hydrated || inferenceOptionId !== "chatgpt-relay" || !relayToken || !relayPaired) return;
@@ -2023,6 +2037,7 @@ export function RabbitHoleApp() {
 
     if (!option.fixture) return;
 
+    setDevMode(true);
     setModelControlsVisible(true);
     setInferenceOptionId("mock");
     setPendingHelp(false);
@@ -2171,6 +2186,18 @@ export function RabbitHoleApp() {
     window.setTimeout(() => composerRef.current?.focus(), 0);
   }
 
+  function toggleExperimentMode() {
+    const nextDevMode = !devMode;
+    setDevMode(nextDevMode);
+    if (nextDevMode) {
+      setModelControlsVisible(true);
+    } else {
+      setPendingFixtureId(null);
+      setPendingHelp(false);
+      if (composerValue.trimStart().startsWith("/")) setComposerValue("");
+    }
+  }
+
   return (
     <main className={`app-shell ${sidebarOpen ? "" : "sidebar-collapsed"}`}>
       <aside className="sidebar" aria-label="Conversation trees">
@@ -2303,11 +2330,11 @@ export function RabbitHoleApp() {
             {EXPERIMENT_MODE_AVAILABLE ? (
               <button
                 type="button"
-                className="icon-button dev-mode-toggle experiment-mode-always-on is-active"
-                aria-label="Experiment mode is always on"
-                aria-pressed="true"
-                title="Experiment mode is always on"
-                disabled
+                className={`icon-button dev-mode-toggle ${devMode ? "is-active" : ""}`}
+                onClick={toggleExperimentMode}
+                aria-label={`${devMode ? "Disable" : "Enable"} experiment mode`}
+                aria-pressed={devMode}
+                title={`${devMode ? "Disable" : "Enable"} experiment mode`}
               >
                 <FlaskConical size={16} />
               </button>
@@ -2377,16 +2404,16 @@ export function RabbitHoleApp() {
                   <button
                     type="button"
                     role="menuitemcheckbox"
-                    aria-checked="true"
-                    className="experiment-mode-always-on is-active"
-                    disabled
+                    aria-checked={devMode}
+                    className={devMode ? "is-active" : undefined}
+                    onClick={toggleExperimentMode}
                   >
                     <FlaskConical size={19} />
                     <span className="ipad-more-menu-copy">
                       <strong>Experiment mode</strong>
                       <small>Demo tools and fixtures</small>
                     </span>
-                    <span className="ipad-more-menu-value">Always on</span>
+                    <span className="ipad-more-menu-value">{devMode ? "On" : "Off"}</span>
                   </button>
                 ) : null}
                 <button type="button" role="menuitem" onClick={toggleColorTheme}>
